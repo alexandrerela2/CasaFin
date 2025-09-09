@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>CasaFin • Aceitar convite</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://esm.sh/@supabase/supabase-js@2"></script>
+  <script src="./config.js"></script>
+  <style>
+    :root { --fg:#111; --muted:#666; --line:#eee; --bg:#fff; }
+    body { font-family:system-ui,Segoe UI,Roboto,Arial; color:var(--fg); background:var(--bg);
+           max-width:560px; margin:40px auto; padding:0 16px }
+    .card { border:1px solid var(--line); border-radius:14px; padding:16px; margin:16px 0 }
+    input,button { width:100%; padding:10px; margin:6px 0 }
+  </style>
+</head>
+<body>
+  <h1>Aceitar convite</h1>
+  <p>Entre com o <b>mesmo e-mail</b> que recebeu o convite.</p>
+
+  <div class="card">
+    <input id="email" placeholder="email" />
+    <input id="password" type="password" placeholder="senha" />
+    <button id="btn-login">Login</button>
+    <button id="btn-signup">Criar conta</button>
+  </div>
+
+  <div class="card">
+    <button id="btn-accept">Aceitar convite</button>
+  </div>
+
+  <script type="module">
+    const { SUPABASE_URL, SUPABASE_ANON_KEY, APP_BASE_URL } = window.CASAFIN;
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const token = new URLSearchParams(location.search).get('token');
+    if (!token) alert('Link inválido: token ausente');
+
+    document.getElementById('btn-login').onclick = async () => {
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value.trim();
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) return alert(error.message);
+      alert('Logado! Agora clique em "Aceitar convite".');
+    };
+
+    document.getElementById('btn-signup').onclick = async () => {
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value.trim();
+      const { error } = await supabase.auth.signUp({ email, password });
+      if (error) return alert(error.message);
+      alert('Conta criada. Faça login e depois aceite o convite.');
+    };
+
+    document.getElementById('btn-accept').onclick = async () => {
+      const { data: u } = await supabase.auth.getUser();
+      if (!u?.user) return alert('Faça login primeiro.');
+      const { data, error } = await supabase.rpc('accept_invite', { _token: token });
+      if (error) return alert(error.message);
+      if (!data) return alert('Convite inválido/expirado ou e-mail diferente do convite.');
+      alert('Convite aceito! Você já tem acesso.');
+      // Leve a pessoa para seu app real (dashboard)
+      // location.href = `${APP_BASE_URL}/app.html`;
+    };
+  </script>
+</body>
+</html>
