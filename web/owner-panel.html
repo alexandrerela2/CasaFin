@@ -4,7 +4,9 @@
   <meta charset="utf-8" />
   <title>CasaFin • Painel do Owner</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Supabase SDK -->
   <script src="https://esm.sh/@supabase/supabase-js@2"></script>
+  <!-- Config -->
   <script src="./config.js"></script>
   <style>
     :root { --fg:#111; --muted:#666; --line:#eee; --bg:#fff; --pill:#f5f5f5; }
@@ -81,25 +83,44 @@
   </div>
 
   <script type="module">
+    // ---------- boot + guard (somente OWNER) ----------
     const { SUPABASE_URL, SUPABASE_ANON_KEY, APP_BASE_URL } = window.CASAFIN;
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+    // precisa estar logado
+    const { data: me } = await supabase.auth.getUser();
+    if (!me?.user) {
+      location.href = `${APP_BASE_URL}/index.html`;
+      throw new Error('no-session');
+    }
+
+    // precisa ser OWNER aprovado em ao menos 1 tenant
+    const { data: owners, error: ownersErr } = await supabase
+      .from('memberships')
+      .select('tenant_id')
+      .eq('user_id', me.user.id)
+      .eq('approved', true)
+      .eq('role', 'owner');
+
+    if (ownersErr || !owners || owners.length === 0) {
+      // qualquer usuário que não seja owner é enviado ao app
+      location.href = `${APP_BASE_URL}/app.html`;
+      throw new Error('not-owner');
+    }
+
+    // sessão OK e é owner
+    document.getElementById('me-email').textContent = me.user.email;
+
+    // ---------- helpers UI ----------
     const $ = (sel) => document.querySelector(sel);
     function slugify(str){
       return (str||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
         .toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'').slice(0,60);
     }
 
-    // ---------- sessão ----------
-    const { data: userRes } = await supabase.auth.getUser();
-    if (!userRes?.user) {
-      alert('Faça login como Owner.');
-      location.href = `${APP_BASE_URL}/owner-login.html`;
-    }
-    $('#me-email').textContent = userRes.user.email;
-    $('#btn-logout').onclick = async () => {
+    document.getElementById('btn-logout').onclick = async () => {
       await supabase.auth.signOut();
-      location.href = `${APP_BASE_URL}/owner-login.html`;
+      location.href = `${APP_BASE_URL}/index.html`;
     };
 
     // ---------- criar tenant + convite admin ----------
@@ -124,12 +145,13 @@
       if (error) { $('#invite-out').textContent = ''; return alert(error.message); }
 
       const link = `${APP_BASE_URL}/accept-invite.html?token=${data.admin_invite_token}`;
-      $('#invite-out').innerHTML = `Convite do Admin: <a href="${link}" target="_blank">${link}</a>\nExpira: ${new Date(data.expires_at).toLocaleString()}`;
+      $('#invite-out').innerHTML =
+        `Convite do Admin: <a href="${link}" target="_blank">${link}</a>\nExpira: ${new Date(data.expires_at).toLocaleString()}`;
 
-      // Teste: validar criação no Supabase
+      // Teste pós-criação
       await runPostCreateTest({ slug, adminEmail: email });
 
-      // recarrega lista
+      // Recarregar lista
       await loadOwnerTenants();
     };
 
@@ -142,7 +164,7 @@
       log.push('✅ Tenant criado.');
 
       // 2) membership owner existe?
-      const uid = (await supabase.auth.getUser()).data?.user?.id;
+      const uid = me.user.id;
       const { data: m1 } = await supabase.from('memberships')
         .select('role, approved').eq('tenant_id', t1.id).eq('user_id', uid).maybeSingle();
       if (!m1 || m1.role !== 'owner' || !m1.approved) { log.push('❌ Membership de Owner ausente.'); }
@@ -160,11 +182,10 @@
 
     // ---------- listar tenants do owner ----------
     async function loadOwnerTenants() {
-      const uid = (await supabase.auth.getUser()).data?.user?.id;
       const { data, error } = await supabase
         .from('memberships')
         .select('tenant_id, role, tenants!inner(id, name, slug, created_at)')
-        .eq('user_id', uid).eq('approved', true).eq('role','owner')
+        .eq('user_id', me.user.id).eq('approved', true).eq('role','owner')
         .order('created_at', { ascending:false });
 
       if (error) { alert(error.message); return; }
@@ -181,11 +202,9 @@
             .select('is_paused').eq('id', t.id).limit(1).maybeSingle();
           if (st && typeof st.is_paused === 'boolean') statusLabel = st.is_paused ? 'Pausado' : 'Ativo';
           else canPause = false;
-        } catch (_) {
-          canPause = false; // coluna não existe
-        }
+        } catch (_) { canPause = false; }
 
-        // pega últimos convites de admin (pode mostrar quem foi/é admin convidado)
+        // pega últimos convites de admin
         const { data: adminsInv } = await supabase.from('invites')
           .select('email, used_at').eq('tenant_id', t.id).eq('role','admin')
           .order('created_at',{ ascending:false }).limit(3);
@@ -220,13 +239,12 @@
             loadOwnerTenants();
           }
           if (act === 'pause') {
-            // tenta alternar a coluna is_paused (se existir)
-            // se não existir, mostra instrução de migração
+            // alterna a coluna is_paused (se existir)
             const { data: row, error: e0 } = await supabase.from('tenants')
               .select('is_paused').eq('id', id).maybeSingle();
             if (e0 || typeof row?.is_paused !== 'boolean') {
               alert(
-`Para habilitar Pausar/Retomar, rode esta migração no SQL Editor:
+`Para habilitar Pausar/Retomar, rode esta migração no Supabase (SQL Editor):
 
 alter table public.tenants add column if not exists is_paused boolean not null default false;`
               );
@@ -241,7 +259,7 @@ alter table public.tenants add column if not exists is_paused boolean not null d
       });
     }
 
-    $('#btn-reload').onclick = loadOwnerTenants;
+    document.getElementById('btn-reload').onclick = loadOwnerTenants;
     await loadOwnerTenants();
   </script>
 </body>
