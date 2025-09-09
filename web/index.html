@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <!-- Supabase SDK -->
   <script src="https://esm.sh/@supabase/supabase-js@2"></script>
-  <!-- Config do projeto (edite SUPABASE_URL/ANON/APP_BASE_URL) -->
+  <!-- Config do projeto -->
   <script src="./config.js"></script>
   <style>
     :root { --fg:#111; --muted:#666; --line:#eee; --bg:#fff; }
@@ -19,6 +19,7 @@
     input,button { width:100%; padding:10px; margin:6px 0 }
     .row { display:grid; grid-template-columns:1fr 1fr; gap:8px }
     .hint { font-size:12px; color:var(--muted) }
+    .linkbtn { width:100%; padding:10px; margin-top:6px; background:transparent; border:0; color:#246; text-decoration:underline; cursor:pointer; text-align:left }
   </style>
 </head>
 <body>
@@ -36,6 +37,10 @@
       <button id="btn-login">Entrar (Owner)</button>
       <button id="btn-signup">Criar conta</button>
     </div>
+
+    <!-- Botão "Esqueci a senha" -->
+    <button id="btn-forgot" class="linkbtn">Esqueci a senha</button>
+
     <div class="hint">
       Dica: em desenvolvimento, ative “Auto-confirm user” no Supabase para agilizar testes.
     </div>
@@ -45,22 +50,21 @@
     const { SUPABASE_URL, SUPABASE_ANON_KEY, APP_BASE_URL } = window.CASAFIN;
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // Se já estiver logado, vai direto pro painel do Owner
+    // Se já estiver logado, vai direto para o painel do Owner
     const { data: u } = await supabase.auth.getUser();
     if (u?.user) location.href = `${APP_BASE_URL}/owner-panel.html`;
 
+    // Login
     document.getElementById('btn-login').onclick = async () => {
       const email = document.getElementById('email').value.trim();
       const password = document.getElementById('password').value.trim();
       if (!email || !password) return alert('Preencha e-mail e senha.');
-
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) return alert(error.message);
-
-      // Login OK -> Painel do Owner
       location.href = `${APP_BASE_URL}/owner-panel.html`;
     };
 
+    // Criar conta
     document.getElementById('btn-signup').onclick = async () => {
       const email = document.getElementById('email').value.trim();
       const password = document.getElementById('password').value.trim();
@@ -69,6 +73,18 @@
       if (error) return alert(error.message);
       alert('Conta criada. Verifique e-mail (se exigido) e faça login.');
     };
+
+    // Esqueci a senha
+    document.getElementById('btn-forgot').onclick = async () => {
+      const email = document.getElementById('email').value.trim();
+      if (!email) return alert('Digite seu e-mail no campo acima antes de solicitar a recuperação.');
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${APP_BASE_URL}/update-password.html`
+      });
+      if (error) return alert(error.message);
+      alert('Se o e-mail existir, enviamos um link para redefinir a senha. Verifique sua caixa de entrada/spam.');
+    };
   </script>
 </body>
 </html>
+
