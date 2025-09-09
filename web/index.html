@@ -4,89 +4,72 @@
   <meta charset="utf-8" />
   <title>CasaFin • Entrada</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!-- Supabase SDK -->
   <script src="https://esm.sh/@supabase/supabase-js@2"></script>
-  <!-- Config do projeto -->
   <script src="./config.js"></script>
   <style>
     :root { --fg:#111; --muted:#666; --line:#eee; --bg:#fff; }
     * { box-sizing:border-box }
     body { font-family:system-ui,Segoe UI,Roboto,Arial; color:var(--fg); background:var(--bg);
-           max-width:520px; margin:48px auto; padding:0 16px }
-    h1 { margin:0 0 8px } p{color:var(--muted)}
-    .card { border:1px solid var(--line); border-radius:14px; padding:16px; margin:16px 0 }
+           max-width:420px; margin:56px auto; padding:0 16px }
+    h1 { margin:0 0 16px }
+    .card { border:1px solid var(--line); border-radius:14px; padding:16px; }
     label { font-size:12px; color:var(--muted) }
-    input,button { width:100%; padding:10px; margin:6px 0 }
-    .row { display:grid; grid-template-columns:1fr 1fr; gap:8px }
-    .hint { font-size:12px; color:var(--muted) }
-    .linkbtn { width:100%; padding:10px; margin-top:6px; background:transparent; border:0; color:#246; text-decoration:underline; cursor:pointer; text-align:left }
+    input,button { width:100%; padding:10px; margin:8px 0 }
+    .hint { font-size:12px; color:var(--muted); text-align:center; margin-top:6px }
+    a { color:#246; text-decoration:underline }
   </style>
 </head>
 <body>
   <h1>CasaFin</h1>
-  <p>Entre com o <b>e-mail e senha</b> do Owner (Supabase Auth). Após login você irá para o Painel do Owner.</p>
-
-  <div class="card">
+  <form id="login-form" class="card">
     <label>E-mail</label>
-    <input id="email" placeholder="owner@exemplo.com" autocomplete="username" />
+    <input id="email" type="email" placeholder="seu@email.com" autocomplete="username" required />
 
     <label>Senha</label>
-    <input id="password" type="password" placeholder="••••••••" autocomplete="current-password" />
+    <input id="password" type="password" placeholder="••••••••" autocomplete="current-password" required />
 
-    <div class="row">
-      <button id="btn-login">Entrar (Owner)</button>
-      <button id="btn-signup">Criar conta</button>
-    </div>
-
-    <!-- Botão "Esqueci a senha" -->
-    <button id="btn-forgot" class="linkbtn">Esqueci a senha</button>
-
+    <button id="btn-login" type="submit">Entrar</button>
     <div class="hint">
-      Dica: em desenvolvimento, ative “Auto-confirm user” no Supabase para agilizar testes.
+      <a href="./forgot-password.html">Esqueceu a senha?</a>
     </div>
-  </div>
+  </form>
 
   <script type="module">
     const { SUPABASE_URL, SUPABASE_ANON_KEY, APP_BASE_URL } = window.CASAFIN;
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // Se já estiver logado, vai direto para o painel do Owner
-    const { data: u } = await supabase.auth.getUser();
-    if (u?.user) location.href = `${APP_BASE_URL}/owner-panel.html`;
+    // Se já estiver logado, decide para onde mandar
+    const { data: u0 } = await supabase.auth.getUser();
+    if (u0?.user) await postLoginRedirect();
 
-    // Login
-    document.getElementById('btn-login').onclick = async () => {
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
       const email = document.getElementById('email').value.trim();
       const password = document.getElementById('password').value.trim();
-      if (!email || !password) return alert('Preencha e-mail e senha.');
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) return alert(error.message);
-      location.href = `${APP_BASE_URL}/owner-panel.html`;
-    };
+      await postLoginRedirect();
+    });
 
-    // Criar conta
-    document.getElementById('btn-signup').onclick = async () => {
-      const email = document.getElementById('email').value.trim();
-      const password = document.getElementById('password').value.trim();
-      if (!email || !password) return alert('Preencha e-mail e senha.');
-      const { error } = await supabase.auth.signUp({ email, password });
-      if (error) return alert(error.message);
-      alert('Conta criada. Verifique e-mail (se exigido) e faça login.');
-    };
+    async function postLoginRedirect() {
+      const { data: u } = await supabase.auth.getUser();
+      if (!u?.user) return;
+      const uid = u.user.id;
 
-    // Esqueci a senha
-    document.getElementById('btn-forgot').onclick = async () => {
-      const email = document.getElementById('email').value.trim();
-      if (!email) return alert('Digite seu e-mail no campo acima antes de solicitar a recuperação.');
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${APP_BASE_URL}/update-password.html`
-      });
-      if (error) return alert(error.message);
-      alert('Se o e-mail existir, enviamos um link para redefinir a senha. Verifique sua caixa de entrada/spam.');
-    };
+      // vê se é dono de alguma Casa
+      const { data: ms, error } = await supabase
+        .from('memberships')
+        .select('role')
+        .eq('user_id', uid)
+        .eq('approved', true);
+
+      if (error) { console.error(error); return location.href = `${APP_BASE_URL}/app.html`; }
+
+      const roles = (ms || []).map(m => m.role);
+      if (roles.includes('owner')) location.href = `${APP_BASE_URL}/owner-panel.html`;
+      else location.href = `${APP_BASE_URL}/app.html`;
+    }
   </script>
 </body>
 </html>
-await supabase.auth.resetPasswordForEmail(email, {
-  redirectTo: `${APP_BASE_URL}/forgot-password.html`
-});
+
