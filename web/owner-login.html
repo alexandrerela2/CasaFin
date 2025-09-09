@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>CasaFin • Owner Login</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://esm.sh/@supabase/supabase-js@2"></script>
+  <script src="./config.js"></script>
+  <style>
+    :root { --fg:#111; --muted:#666; --line:#eee; --bg:#fff; }
+    * { box-sizing:border-box }
+    body { font-family:system-ui,Segoe UI,Roboto,Arial; color:var(--fg); background:var(--bg);
+           max-width:480px; margin:48px auto; padding:0 16px }
+    h1 { margin:0 0 8px }
+    p { color:var(--muted) }
+    .card { border:1px solid var(--line); border-radius:14px; padding:16px; margin:16px 0 }
+    label { font-size:12px; color:var(--muted) }
+    input,button { width:100%; padding:10px; margin:6px 0 }
+    .row { display:grid; grid-template-columns:1fr 1fr; gap:8px }
+    .hint { font-size:12px; color:var(--muted) }
+  </style>
+</head>
+<body>
+  <h1>CasaFin</h1>
+  <p>Entre com o <b>e-mail e senha</b> cadastrados no Supabase (usuário Owner).</p>
+
+  <div class="card">
+    <label>E-mail</label>
+    <input id="email" placeholder="owner@exemplo.com" />
+
+    <label>Senha</label>
+    <input id="password" type="password" placeholder="••••••••" />
+
+    <div class="row">
+      <button id="btn-login">Login</button>
+      <button id="btn-signup">Criar conta</button>
+    </div>
+    <div class="hint">Dica: em desenvolvimento, você pode habilitar “Auto-confirm user” no Supabase.</div>
+  </div>
+
+  <script type="module">
+    const { SUPABASE_URL, SUPABASE_ANON_KEY, APP_BASE_URL } = window.CASAFIN;
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // Se já estiver logado, pula direto
+    const { data: u } = await supabase.auth.getUser();
+    if (u?.user) location.href = `${APP_BASE_URL}/owner-panel.html`;
+
+    document.getElementById('btn-login').onclick = async () => {
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value.trim();
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) return alert(error.message);
+      location.href = `${APP_BASE_URL}/owner-panel.html`;
+    };
+
+    document.getElementById('btn-signup').onclick = async () => {
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value.trim();
+      const { error } = await supabase.auth.signUp({ email, password });
+      if (error) return alert(error.message);
+      alert('Conta criada. Verifique e-mail (se exigido) e faça login.');
+    };
+  </script>
+</body>
+</html>
