@@ -87,4 +87,6 @@
   </script>
 </body>
 </html>
-
+await supabase.auth.resetPasswordForEmail(email, {
+  redirectTo: `${APP_BASE_URL}/forgot-password.html`
+});
