@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>CasaFin • App</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://esm.sh/@supabase/supabase-js@2"></script>
+  <script src="./config.js"></script>
+  <style>
+    :root { --fg:#111; --muted:#666; --line:#eee; --bg:#fff; --pill:#f5f5f5; }
+    * { box-sizing:border-box }
+    body { font-family:system-ui,Segoe UI,Roboto,Arial; color:var(--fg); background:var(--bg);
+           max-width:980px; margin:28px auto; padding:0 16px }
+    .bar { display:flex; align-items:center; justify-content:space-between; gap:12px }
+    .pill { background:var(--pill); border-radius:999px; padding:6px 10px; font-size:12px }
+    .card { border:1px solid var(--line); border-radius:14px; padding:16px; margin:16px 0 }
+    table { width:100%; border-collapse:collapse } th,td{padding:8px; border-bottom:1px solid var(--line); text-align:left}
+    a { color:#246 }
+  </style>
+</head>
+<body>
+  <div class="bar">
+    <h1>CasaFin</h1>
+    <div>
+      <span class="pill" id="me-email">—</span>
+      <button id="logout">Sair</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Minhas Casas</h3>
+    <table>
+      <thead><tr><th>Nome</th><th>Slug</th><th>Papel</th></tr></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <p style="color:#666">Se você for <b>Owner</b>, use o <a href="./owner-panel.html">Painel do Owner</a>.</p>
+  </div>
+
+  <script type="module">
+    const { SUPABASE_URL, SUPABASE_ANON_KEY, APP_BASE_URL } = window.CASAFIN;
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const { data: u } = await supabase.auth.getUser();
+    if (!u?.user) { location.href = `${APP_BASE_URL}/index.html`; }
+    document.getElementById('me-email').textContent = u.user.email;
+
+    async function loadTenants() {
+      const { data, error } = await supabase
+        .from('memberships')
+        .select('role, tenants!inner(name, slug)')
+        .eq('user_id', u.user.id)
+        .eq('approved', true)
+        .order('created_at', { ascending:false });
+
+      if (error) return alert(error.message);
+
+      const tb = document.getElementById('tbody');
+      tb.innerHTML = '';
+      (data || []).forEach(m => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${m.tenants.name}</td><td>${m.tenants.slug}</td><td>${m.role}</td>`;
+        tb.appendChild(tr);
+      });
+    }
+    await loadTenants();
+
+    document.getElementById('logout').onclick = async () => {
+      await supabase.auth.signOut();
+      location.href = `${APP_BASE_URL}/index.html`;
+    };
+  </script>
+</body>
+</html>
