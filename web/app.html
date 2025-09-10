@@ -51,7 +51,6 @@
         .eq('user_id', u.user.id)
         .eq('approved', true)
         .order('created_at', { ascending:false });
-
       if (error) return alert(error.message);
 
       const tb = document.getElementById('tbody');
