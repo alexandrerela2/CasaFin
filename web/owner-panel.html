@@ -4,9 +4,7 @@
   <meta charset="utf-8" />
   <title>CasaFin • Painel do Owner</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!-- Supabase SDK -->
   <script src="https://esm.sh/@supabase/supabase-js@2"></script>
-  <!-- Config -->
   <script src="./config.js"></script>
   <style>
     :root { --fg:#111; --muted:#666; --line:#eee; --bg:#fff; --pill:#f5f5f5; }
@@ -39,26 +37,13 @@
     </div>
   </div>
 
-  <!-- Criar Tenant + Admin -->
   <div class="card">
     <h3>1) Criar nova Casa e informar o Admin</h3>
     <div class="grid cols-2">
-      <div>
-        <label>Nome da Casa</label>
-        <input id="t-name" placeholder="Casa Zamboni" />
-      </div>
-      <div>
-        <label>Slug (sem espaços)</label>
-        <input id="t-slug" placeholder="casa-zamboni" />
-      </div>
-      <div>
-        <label>Passcode da Casa</label>
-        <input id="t-pass" placeholder="ex.: 1234" />
-      </div>
-      <div>
-        <label>E-mail do Admin desta Casa</label>
-        <input id="t-admin-email" placeholder="admin@exemplo.com" />
-      </div>
+      <div><label>Nome da Casa</label><input id="t-name" placeholder="Casa Zamboni" /></div>
+      <div><label>Slug (sem espaços)</label><input id="t-slug" placeholder="casa-zamboni" /></div>
+      <div><label>Passcode da Casa</label><input id="t-pass" placeholder="ex.: 1234" /></div>
+      <div><label>E-mail do Admin desta Casa</label><input id="t-admin-email" placeholder="admin@exemplo.com" /></div>
     </div>
     <div class="row">
       <button id="btn-suggest-slug">Sugerir slug</button>
@@ -68,67 +53,44 @@
     <div id="test-out" class="mono" style="margin-top:8px; white-space:pre-wrap"></div>
   </div>
 
-  <!-- Lista de Tenants do Owner -->
   <div class="card">
     <h3>2) Minhas Casas (onde sou Owner)</h3>
     <table>
-      <thead>
-        <tr>
-          <th>Nome</th><th>Slug</th><th>Status</th><th>Admins (convites)</th><th>Ações</th>
-        </tr>
-      </thead>
+      <thead><tr><th>Nome</th><th>Slug</th><th>Status</th><th>Admins (convites)</th><th>Ações</th></tr></thead>
       <tbody id="tenants-body"></tbody>
     </table>
     <button id="btn-reload">Recarregar lista</button>
   </div>
 
   <script type="module">
-    // ---------- boot + guard (somente OWNER) ----------
     const { SUPABASE_URL, SUPABASE_ANON_KEY, APP_BASE_URL } = window.CASAFIN;
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // precisa estar logado
+    // ---- GUARD: somente OWNER aprovado ----
     const { data: me } = await supabase.auth.getUser();
-    if (!me?.user) {
-      location.href = `${APP_BASE_URL}/index.html`;
-      throw new Error('no-session');
-    }
-
-    // precisa ser OWNER aprovado em ao menos 1 tenant
+    if (!me?.user) { location.href = `${APP_BASE_URL}/index.html`; throw new Error('no-session'); }
     const { data: owners, error: ownersErr } = await supabase
-      .from('memberships')
-      .select('tenant_id')
-      .eq('user_id', me.user.id)
-      .eq('approved', true)
-      .eq('role', 'owner');
-
+      .from('memberships').select('tenant_id')
+      .eq('user_id', me.user.id).eq('approved', true).eq('role', 'owner');
     if (ownersErr || !owners || owners.length === 0) {
-      // qualquer usuário que não seja owner é enviado ao app
-      location.href = `${APP_BASE_URL}/app.html`;
-      throw new Error('not-owner');
+      location.href = `${APP_BASE_URL}/app.html`; throw new Error('not-owner');
     }
-
-    // sessão OK e é owner
     document.getElementById('me-email').textContent = me.user.email;
 
-    // ---------- helpers UI ----------
-    const $ = (sel) => document.querySelector(sel);
-    function slugify(str){
-      return (str||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-        .toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'').slice(0,60);
-    }
+    // helpers
+    const $ = (s) => document.querySelector(s);
+    const slugify = (str)=> (str||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+      .toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'').slice(0,60);
 
     document.getElementById('btn-logout').onclick = async () => {
-      await supabase.auth.signOut();
-      location.href = `${APP_BASE_URL}/index.html`;
+      await supabase.auth.signOut(); location.href = `${APP_BASE_URL}/index.html`;
     };
-
-    // ---------- criar tenant + convite admin ----------
-    $('#btn-suggest-slug').onclick = () => {
+    document.getElementById('btn-suggest-slug').onclick = () => {
       $('#t-slug').value = slugify($('#t-name').value);
     };
 
-    $('#btn-create-tenant').onclick = async () => {
+    // criar tenant + convite admin
+    document.getElementById('btn-create-tenant').onclick = async () => {
       const name  = $('#t-name').value.trim();
       const slug  = $('#t-slug').value.trim();
       const pass  = $('#t-pass').value.trim();
@@ -136,129 +98,62 @@
       if (!name || !slug || !pass || !email) return alert('Preencha todos os campos.');
       if (/\s/.test(slug)) return alert('Slug não pode ter espaços. Use hífens.');
 
-      $('#invite-out').textContent = 'Criando Casa...';
-      $('#test-out').textContent = '';
-
-      const { data, error } = await supabase.rpc('create_tenant_with_admin', {
-        _name: name, _slug: slug, _passcode: pass, _admin_email: email
-      });
+      $('#invite-out').textContent = 'Criando Casa...'; $('#test-out').textContent = '';
+      const { data, error } = await supabase.rpc('create_tenant_with_admin',
+        { _name: name, _slug: slug, _passcode: pass, _admin_email: email });
       if (error) { $('#invite-out').textContent = ''; return alert(error.message); }
 
       const link = `${APP_BASE_URL}/accept-invite.html?token=${data.admin_invite_token}`;
-      $('#invite-out').innerHTML =
-        `Convite do Admin: <a href="${link}" target="_blank">${link}</a>\nExpira: ${new Date(data.expires_at).toLocaleString()}`;
-
-      // Teste pós-criação
+      $('#invite-out').innerHTML = `Convite do Admin: <a href="${link}" target="_blank">${link}</a>\nExpira: ${new Date(data.expires_at).toLocaleString()}`;
       await runPostCreateTest({ slug, adminEmail: email });
-
-      // Recarregar lista
       await loadOwnerTenants();
     };
 
     async function runPostCreateTest({ slug, adminEmail }) {
       const log = [];
-      // 1) tenant existe?
-      const { data: t1, error: e1 } = await supabase.from('tenants')
-        .select('id, slug, created_by, created_at').eq('slug', slug).maybeSingle();
-      if (e1 || !t1) { log.push('❌ Tenant não encontrado.'); $('#test-out').textContent = log.join('\n'); return; }
+      const { data: t1 } = await supabase.from('tenants').select('id, slug').eq('slug', slug).maybeSingle();
+      if (!t1) { log.push('❌ Tenant não encontrado.'); $('#test-out').textContent = log.join('\n'); return; }
       log.push('✅ Tenant criado.');
-
-      // 2) membership owner existe?
-      const uid = me.user.id;
-      const { data: m1 } = await supabase.from('memberships')
-        .select('role, approved').eq('tenant_id', t1.id).eq('user_id', uid).maybeSingle();
-      if (!m1 || m1.role !== 'owner' || !m1.approved) { log.push('❌ Membership de Owner ausente.'); }
-      else { log.push('✅ Membership de Owner aprovada.'); }
-
-      // 3) convite de admin criado?
-      const { data: inv } = await supabase.from('invites')
-        .select('email, role, token, expires_at').eq('tenant_id', t1.id).eq('email', adminEmail)
-        .order('created_at', { ascending:false }).limit(1).maybeSingle();
-      if (!inv || inv.role !== 'admin') { log.push('❌ Convite de Admin não encontrado.'); }
-      else { log.push(`✅ Convite de Admin encontrado (expira ${new Date(inv.expires_at).toLocaleString()}).`); }
-
+      const { data: m1 } = await supabase.from('memberships').select('role, approved').eq('tenant_id', t1.id).eq('user_id', me.user.id).maybeSingle();
+      log.push(m1 && m1.role==='owner' && m1.approved ? '✅ Membership de Owner aprovada.' : '❌ Membership de Owner ausente.');
+      const { data: inv } = await supabase.from('invites').select('email, role, expires_at').eq('tenant_id', t1.id).eq('email', adminEmail).order('created_at',{ascending:false}).limit(1).maybeSingle();
+      log.push(inv && inv.role==='admin' ? `✅ Convite de Admin (expira ${new Date(inv.expires_at).toLocaleString()}).` : '❌ Convite de Admin não encontrado.');
       $('#test-out').textContent = log.join('\n');
     }
 
-    // ---------- listar tenants do owner ----------
     async function loadOwnerTenants() {
       const { data, error } = await supabase
         .from('memberships')
-        .select('tenant_id, role, tenants!inner(id, name, slug, created_at)')
+        .select('tenant_id, tenants!inner(id, name, slug, is_paused)')
         .eq('user_id', me.user.id).eq('approved', true).eq('role','owner')
         .order('created_at', { ascending:false });
-
-      if (error) { alert(error.message); return; }
-
-      const tbody = $('#tenants-body'); tbody.innerHTML = '';
-
+      if (error) return alert(error.message);
+      const tbody = document.getElementById('tenants-body'); tbody.innerHTML = '';
       for (const m of (data || [])) {
-        const t = m.tenants;
-        // tenta ler status is_paused (se coluna existir)
-        let statusLabel = 'Ativo';
-        let canPause = true;
-        try {
-          const { data: st } = await supabase.from('tenants')
-            .select('is_paused').eq('id', t.id).limit(1).maybeSingle();
-          if (st && typeof st.is_paused === 'boolean') statusLabel = st.is_paused ? 'Pausado' : 'Ativo';
-          else canPause = false;
-        } catch (_) { canPause = false; }
-
-        // pega últimos convites de admin
-        const { data: adminsInv } = await supabase.from('invites')
-          .select('email, used_at').eq('tenant_id', t.id).eq('role','admin')
-          .order('created_at',{ ascending:false }).limit(3);
-
-        const adminsText = (adminsInv?.length
-          ? adminsInv.map(x => `${x.email}${x.used_at ? ' (aceito)' : ''}`).join(', ')
-          : '—');
-
+        const t = m.tenants; const statusLabel = t.is_paused ? 'Pausado' : 'Ativo';
         const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${t.name}</td>
-          <td class="mono">${t.slug}</td>
-          <td>${statusLabel}</td>
-          <td>${adminsText}</td>
-          <td>
-            <button data-act="pause"  data-id="${t.id}" ${!canPause ? 'disabled title="adicione a coluna is_paused no banco"' : ''}>${statusLabel==='Pausado'?'Retomar':'Pausar'}</button>
-            <button data-act="delete" data-id="${t.id}" style="margin-left:6px">Excluir</button>
-          </td>
-        `;
+        tr.innerHTML = `<td>${t.name}</td><td class="mono">${t.slug}</td><td>${statusLabel}</td><td>—</td>
+          <td><button data-act="toggle" data-id="${t.id}">${t.is_paused?'Retomar':'Pausar'}</button>
+              <button data-act="delete" data-id="${t.id}" style="margin-left:6px">Excluir</button></td>`;
         tbody.appendChild(tr);
       }
-
-      // ações
-      tbody.querySelectorAll('button').forEach(btn => {
-        btn.onclick = async () => {
-          const id = btn.getAttribute('data-id');
-          const act = btn.getAttribute('data-act');
-          if (act === 'delete') {
-            if (!confirm('Tem certeza que deseja excluir esta Casa? Esta ação é irreversível.')) return;
-            const { error } = await supabase.from('tenants').delete().eq('id', id);
-            if (error) return alert(error.message);
-            loadOwnerTenants();
-          }
-          if (act === 'pause') {
-            // alterna a coluna is_paused (se existir)
-            const { data: row, error: e0 } = await supabase.from('tenants')
-              .select('is_paused').eq('id', id).maybeSingle();
-            if (e0 || typeof row?.is_paused !== 'boolean') {
-              alert(
-`Para habilitar Pausar/Retomar, rode esta migração no Supabase (SQL Editor):
-
-alter table public.tenants add column if not exists is_paused boolean not null default false;`
-              );
-              return;
-            }
-            const { error } = await supabase.from('tenants')
-              .update({ is_paused: !row.is_paused }).eq('id', id);
-            if (error) return alert(error.message);
-            loadOwnerTenants();
-          }
-        };
+      tbody.querySelectorAll('button').forEach(btn => btn.onclick = async () => {
+        const id = btn.getAttribute('data-id'); const act = btn.getAttribute('data-act');
+        if (act==='delete') {
+          if (!confirm('Tem certeza que deseja excluir esta Casa?')) return;
+          const { error } = await supabase.from('tenants').delete().eq('id', id);
+          if (error) return alert(error.message); loadOwnerTenants();
+        } else if (act==='toggle') {
+          // requer coluna is_paused; se não existir, crie no SQL Editor
+          const { data: row } = await supabase.from('tenants').select('is_paused').eq('id', id).maybeSingle();
+          if (typeof row?.is_paused !== 'boolean') return alert(
+            'Adicione a coluna is_paused:\n\nalter table public.tenants add column if not exists is_paused boolean not null default false;'
+          );
+          const { error } = await supabase.from('tenants').update({ is_paused: !row.is_paused }).eq('id', id);
+          if (error) return alert(error.message); loadOwnerTenants();
+        }
       });
     }
-
     document.getElementById('btn-reload').onclick = loadOwnerTenants;
     await loadOwnerTenants();
   </script>
