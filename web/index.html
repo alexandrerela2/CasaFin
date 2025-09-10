@@ -24,21 +24,17 @@
   <form id="login-form" class="card">
     <label>E-mail</label>
     <input id="email" type="email" placeholder="seu@email.com" autocomplete="username" required />
-
     <label>Senha</label>
     <input id="password" type="password" placeholder="••••••••" autocomplete="current-password" required />
-
     <button id="btn-login" type="submit">Entrar</button>
-    <div class="hint">
-      <a href="./forgot-password.html">Esqueceu a senha?</a>
-    </div>
+    <div class="hint"><a href="./forgot-password.html">Esqueceu a senha?</a></div>
   </form>
 
   <script type="module">
     const { SUPABASE_URL, SUPABASE_ANON_KEY, APP_BASE_URL } = window.CASAFIN;
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // Se já estiver logado, decide para onde mandar
+    // já logado?
     const { data: u0 } = await supabase.auth.getUser();
     if (u0?.user) await postLoginRedirect();
 
@@ -54,17 +50,13 @@
     async function postLoginRedirect() {
       const { data: u } = await supabase.auth.getUser();
       if (!u?.user) return;
-      const uid = u.user.id;
-
-      // vê se é dono de alguma Casa
       const { data: ms, error } = await supabase
         .from('memberships')
         .select('role')
-        .eq('user_id', uid)
+        .eq('user_id', u.user.id)
         .eq('approved', true);
 
-      if (error) { console.error(error); return location.href = `${APP_BASE_URL}/app.html`; }
-
+      if (error) return location.href = `${APP_BASE_URL}/app.html`;
       const roles = (ms || []).map(m => m.role);
       if (roles.includes('owner')) location.href = `${APP_BASE_URL}/owner-panel.html`;
       else location.href = `${APP_BASE_URL}/app.html`;
@@ -72,4 +64,3 @@
   </script>
 </body>
 </html>
-
