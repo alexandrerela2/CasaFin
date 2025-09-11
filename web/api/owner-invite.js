@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const ANON_KEY = process.env.SUPABASE_ANON_KEY; // opcional (só para validar papel via RLS)
+const ANON_KEY = process.env.SUPABASE_ANON_KEY; // usado para validar papel via RLS e obter user id
 const APP_BASE_URL = process.env.APP_BASE_URL || "https://casa-fin.vercel.app";
 
 export default async function handler(req, res) {
@@ -27,19 +27,25 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "expires_in_days deve estar entre 1 e 30" });
     }
 
-    // 1) Validação: chamar o Postgres com o token do usuário (RLS)
-    //    e checar se ele é OWNER do tenant informado.
-    //    Para isso, usamos um client "do usuário" com o ANON_KEY + Authorization: Bearer <token>
+    // Client no contexto do USUÁRIO para validar que é OWNER desse tenant
     const userClient = createClient(SUPABASE_URL, ANON_KEY, {
       global: { headers: { Authorization: `Bearer ${access_token}` } },
     });
 
+    // 0) Descobre o user_id do chamador (vamos usar em created_by)
+    const { data: userInfo, error: userErr } = await userClient.auth.getUser();
+    if (userErr || !userInfo?.user?.id) {
+      return res.status(401).json({ error: "Sessão inválida ao obter usuário." });
+    }
+    const ownerUserId = userInfo.user.id;
+
+    // 1) Valida papel de OWNER no tenant
     const { data: ownerCheck, error: ownerErr } = await userClient
       .from("memberships")
       .select("role")
       .eq("tenant_id", tenant_id)
-      .eq("approved", true)
       .eq("role", "owner")
+      .eq("approved", true)
       .limit(1);
 
     if (ownerErr) {
@@ -49,7 +55,7 @@ export default async function handler(req, res) {
       return res.status(403).json({ error: "Ação permitida apenas ao OWNER deste espaço." });
     }
 
-    // 2) Gera token de convite no Postgres (RPC)
+    // 2) Gera token de convite via RPC (service role)
     const adminDb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
     const { data: tokenData, error: tokenErr } = await adminDb.rpc("create_invite", {
       p_tenant_id: tenant_id,
@@ -57,7 +63,6 @@ export default async function handler(req, res) {
       p_role: role,
       p_expires_in_days: days,
     });
-
     if (tokenErr) {
       return res.status(500).json({ error: `Erro ao gerar token: ${tokenErr.message}` });
     }
@@ -66,15 +71,22 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "Token do convite não retornado pela RPC." });
     }
 
-    // 3) Dispara e-mail de convite pelo Supabase Auth (usa SMTP já configurado)
-    //    O "redirectTo" aponta para o accept-invite.html com o token — após definir a senha,
-    //    o usuário será redirecionado e a membership será concluída.
-    const adminAuth = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
-    const { data: inviteResp, error: inviteErr } = await adminAuth.auth.admin.inviteUserByEmail(
-      email,
-      { redirectTo: `${APP_BASE_URL}/accept-invite.html?token=${encodeURIComponent(token)}` }
-    );
+    // 2.1) ATRIBUI created_by = OWNER (importante p/ RLS/visibilidade)
+    const { error: updErr } = await adminDb
+      .from("invites")
+      .update({ created_by: ownerUserId })
+      .eq("token", token);
+    if (updErr) {
+      // não bloqueia o fluxo de e-mail, mas informa
+      console.warn("Falha ao atualizar created_by no invite:", updErr);
+    }
 
+    // 3) Dispara e-mail de convite via Supabase Auth
+    const adminAuth = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const { data: inviteResp, error: inviteErr } =
+      await adminAuth.auth.admin.inviteUserByEmail(email, {
+        redirectTo: `${APP_BASE_URL}/accept-invite.html?token=${encodeURIComponent(token)}`
+      });
     if (inviteErr) {
       return res.status(500).json({ error: `Erro ao enviar e-mail de convite: ${inviteErr.message}` });
     }
@@ -82,7 +94,7 @@ export default async function handler(req, res) {
     return res.status(200).json({
       ok: true,
       message: "Convite gerado e e-mail enviado.",
-      token, // opcional: para log/debug
+      token,
       userId: inviteResp?.user?.id || null,
     });
   } catch (e) {
@@ -90,3 +102,4 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Erro inesperado" });
   }
 }
+
