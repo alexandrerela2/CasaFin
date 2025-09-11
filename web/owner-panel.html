@@ -8,23 +8,27 @@
     body { font-family: system-ui, Arial; margin:0; background:#fff; color:#1f2328; }
     header { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid #eaeef2; }
     h1 { font-size:18px; margin:0; }
-    main { padding:18px; }
+    main { padding:18px; max-width:980px; margin:0 auto; }
     label { display:block; font-size:13px; margin: 12px 0 6px; }
-    input, select { width:100%; padding:10px 12px; border:1px solid #d0d7de; border-radius:10px; }
-    .row { display:flex; gap:10px; }
+    input, select { width:100%; padding:10px 12px; border:1px solid #d0d7de; border-radius:10px; font-size:14px; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; }
+    .row > * { flex:1 1 240px; }
     button { padding:10px 12px; border:0; border-radius:10px; cursor:pointer; font-weight:600; background:#1f883d; color:#fff; }
     .ghost { background:#eef2f7; color:#111; }
     .table { margin-top:16px; border:1px solid #eaeef2; border-radius:10px; overflow:hidden; }
     .table table { width:100%; border-collapse:collapse; }
     .table th, .table td { padding:10px; border-bottom:1px solid #eaeef2; text-align:left; font-size:14px; }
+    .hint { color:#6a737d; font-size:12px; margin-top:6px; }
+    a.linkbtn { text-decoration:none; padding:8px 12px; border-radius:10px; background:#eef2f7; margin-right:10px; display:inline-block; }
   </style>
+  <!-- Config pública do app (window.CASAFIN) -->
   <script src="./config.js"></script>
 </head>
 <body>
   <header>
     <h1>CasaFin — Painel do Dono</h1>
     <div>
-      <a class="ghost" href="/app.html" style="text-decoration:none; padding:8px 12px; border-radius:10px; background:#eef2f7; margin-right:10px;">App</a>
+      <a class="linkbtn" href="/app.html">App</a>
       <button id="btn-logout">Sair</button>
     </div>
   </header>
@@ -32,19 +36,26 @@
   <main>
     <section>
       <h2>Convites</h2>
+
       <div class="row">
-        <div style="flex:2;">
-          <label>E-mail</label>
+        <div>
+          <label for="invite-email">E-mail</label>
           <input id="invite-email" type="email" placeholder="pessoa@exemplo.com" />
         </div>
-        <div style="flex:1;">
-          <label>Papel</label>
+        <div>
+          <label for="invite-role">Papel</label>
           <select id="invite-role">
             <option value="admin">admin</option>
             <option value="usuario">usuario</option>
           </select>
         </div>
+        <div>
+          <label for="invite-days">Validade (dias)</label>
+          <input id="invite-days" type="number" min="1" max="30" value="7" />
+          <div class="hint">Tempo que o link de convite ficará válido.</div>
+        </div>
       </div>
+
       <div class="row" style="margin-top:12px;">
         <button id="btn-invite">Gerar convite</button>
         <button id="btn-refresh" class="ghost">Atualizar lista</button>
@@ -63,20 +74,47 @@
     import { requireOwner, signOutAndGoHome } from "./lib/guard.js";
     import { supabase } from "./lib/supabase.js";
 
+    // --- Guarda de rota + logout
     await requireOwner();
     document.getElementById("btn-logout").addEventListener("click", signOutAndGoHome);
 
+    // --- Util: obtém o tenant_id do OWNER logado (primeira membership aprovada)
+    async function getOwnerTenantId() {
+      const { data, error } = await supabase
+        .from("memberships")
+        .select("tenant_id")
+        .eq("approved", true)
+        .eq("role", "owner")
+        .limit(1)
+        .maybeSingle();
+      if (error) {
+        console.error("[getOwnerTenantId]", error);
+        alert("Erro ao obter tenant do OWNER: " + error.message);
+        return null;
+      }
+      return data?.tenant_id || null;
+    }
+
+    let TENANT_ID = await getOwnerTenantId();
+    if (!TENANT_ID) {
+      // Sem tenant, não dá para operar convites
+      throw new Error("OWNER sem tenant_id aprovado.");
+    }
+
     const invitesBody = document.getElementById("invites-body");
 
+    // --- Lista convites do tenant do OWNER
     async function loadInvites() {
       invitesBody.innerHTML = "<tr><td colspan='4'>Carregando…</td></tr>";
       const { data, error } = await supabase
         .from("invites")
-        .select("email, role, used_at, created_at")
+        .select("email, role, used_at, created_at, tenant_id")
+        .eq("tenant_id", TENANT_ID)
         .order("created_at", { ascending: false })
         .limit(50);
 
       if (error) {
+        console.error("[loadInvites]", error);
         invitesBody.innerHTML = `<tr><td colspan="4">Erro: ${error.message}</td></tr>`;
         return;
       }
@@ -86,39 +124,58 @@
       }
       invitesBody.innerHTML = data.map(row => {
         const status = row.used_at ? "Usado" : "Pendente";
+        const created = row.created_at ? new Date(row.created_at).toLocaleString("pt-BR") : "-";
         return `<tr>
           <td>${row.email}</td>
           <td>${row.role}</td>
           <td>${status}</td>
-          <td>${new Date(row.created_at).toLocaleString("pt-BR")}</td>
+          <td>${created}</td>
         </tr>`;
       }).join("");
     }
 
+    // --- Cria convite via RPC com 4 parâmetros nomeados
     async function createInvite() {
       const email = document.getElementById("invite-email").value.trim();
       const role = document.getElementById("invite-role").value;
+      const days = parseInt(document.getElementById("invite-days").value, 10) || 7;
+
       if (!email) return alert("Informe o e-mail.");
+      if (!["admin","usuario"].includes(role)) return alert("Papel inválido.");
+      if (days < 1 || days > 30) return alert("Validade deve ser entre 1 e 30 dias.");
 
-      // RPC da Etapa 2: create_invite(tenant_id?, email, role) — sua versão já define o tenant a partir do contexto
-      const { data, error } = await supabase.rpc("create_invite", { email, role });
-      if (error) return alert(error.message);
+      // Chamada conforme assinatura real:
+      // public.create_invite(p_tenant_id uuid, p_email text, p_role user_role, p_expires_in_days integer)
+      const { data, error } = await supabase.rpc("create_invite", {
+        p_tenant_id: TENANT_ID,
+        p_email: email,
+        p_role: role,
+        p_expires_in_days: days
+      });
 
-      // data deve conter o token/link (sua RPC já pode retornar o link pronto).
-      // Caso retorne apenas o token, montamos o link:
+      if (error) {
+        console.error("[createInvite]", error);
+        return alert(error.message);
+      }
+
+      // A função pode retornar apenas o token (text) ou um JSON com token
       const token = typeof data === "string" ? data : (data?.token || "");
+      if (!token) {
+        alert("Convite criado, mas não foi retornado um token. Verifique a função no banco.");
+        return loadInvites();
+      }
+
       const link = `${window.CASAFIN.APP_BASE_URL}/accept-invite.html?token=${encodeURIComponent(token)}`;
-
-      // Envio por e-mail: você pode colar o link manualmente ou implementar envio via SMTP no backend.
       alert(`Convite criado!\n\nLink: ${link}\n\nEnvie este link para o convidado por e-mail.`);
-
       await loadInvites();
     }
 
     document.getElementById("btn-invite").addEventListener("click", createInvite);
     document.getElementById("btn-refresh").addEventListener("click", loadInvites);
 
+    // Inicializa a listagem
     await loadInvites();
   </script>
 </body>
 </html>
+
