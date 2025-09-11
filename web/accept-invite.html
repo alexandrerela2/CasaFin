@@ -16,7 +16,7 @@
     @keyframes spin { to { transform: rotate(360deg); } }
     a.btn { display:inline-block; padding:10px 14px; border-radius:10px; background:#1f883d; color:#fff; text-decoration:none; font-weight:600; }
   </style>
-  <!-- Config do projeto (contém SUPABASE_URL/ANON_KEY e APP_BASE_URL) -->
+  <!-- Carrega variáveis do projeto (SUPABASE_URL/ANON_KEY/APP_BASE_URL) -->
   <script src="./config.js"></script>
 </head>
 <body>
@@ -41,7 +41,7 @@
       statusEl.innerHTML = msg;
     }
 
-    // Ler token do convite
+    // 1) Ler token do convite da querystring
     const params = new URLSearchParams(location.search);
     const token = params.get("token");
     if (!token) {
@@ -53,29 +53,26 @@
     const nextAfterPwd = `/accept-invite.html?token=${encodeURIComponent(token)}`;
     toPwd.href = `/update-password.html?next=${encodeURIComponent(nextAfterPwd)}`;
 
-    // Se vier access_token/refresh_token no hash (links de recovery costumam vir assim),
-    // salva a sessão manualmente antes de continuar.
+    // 2) Se o Supabase trouxe tokens no hash (#access_token/#refresh_token), salvar sessão
     async function ensureSessionFromHash() {
       const hash = new URLSearchParams(location.hash.replace(/^#/, ""));
       const access_token = hash.get("access_token");
       const refresh_token = hash.get("refresh_token");
       if (access_token && refresh_token) {
-        const { error } = await supabase.auth.setSession({ access_token, refresh_token });
-        // limpa o hash para evitar “reprocessar”
+        await supabase.auth.setSession({ access_token, refresh_token });
+        // Limpa o hash para não reprocessar
         history.replaceState({}, document.title, location.pathname + location.search);
-        if (error) {
-          console.error("setSession error:", error);
-        }
       }
     }
 
+    // 3) Executar aceite do convite
     async function acceptInvite() {
       setStatus(`<span class="spinner"></span>Checando sessão…`);
       await ensureSessionFromHash();
 
       let { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        // sem sessão -> mandar o usuário definir/confirmar senha
+        // Sem sessão → usuário precisa abrir pelo link do e-mail e (se necessário) definir a senha
         setStatus("Sessão não encontrada. Abra o link do e-mail e defina sua senha antes de aceitar o convite.", "err");
         fbWrap.style.display = "block";
         return;
@@ -83,8 +80,8 @@
 
       try {
         setStatus(`<span class="spinner"></span>Validando convite…`);
-        // >>>>>> CHAMADA CORRIGIDA: parâmetro p_token <<<<<<
-        const { data, error } = await supabase.rpc("accept_invite", { p_token: token });
+        // >>> Etapa 3: chamada exata da RPC com { token }
+        const { data, error } = await supabase.rpc("accept_invite", { token });
 
         if (error) {
           console.error(error);
@@ -94,8 +91,16 @@
           return;
         }
 
+        // Se a função retorna boolean (V5), 'data' deve ser true em sucesso
+        if (data !== true) {
+          // Tratar qualquer retorno inesperado como erro genérico
+          setStatus("Não foi possível concluir o aceite do convite.", "err");
+          fbWrap.style.display = "block";
+          return;
+        }
+
         setStatus("Convite aceito com sucesso. Redirecionando…", "ok");
-        // Se quiser redirecionar por papel, dá para buscar memberships aqui.
+        // Redireciona para o app; os guards tratarão o papel/rota final
         setTimeout(() => location.href = "/app.html", 800);
       } catch (e) {
         console.error(e);
