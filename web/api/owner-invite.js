@@ -7,7 +7,6 @@ const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const ANON_KEY = process.env.SUPABASE_ANON_KEY;
 const APP_BASE_URL = process.env.APP_BASE_URL || "https://casa-fin.vercel.app";
 
-// SMTP (para envio do e-mail com link de definição de senha)
 const SMTP_HOST = process.env.SMTP_HOST;
 const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
 const SMTP_USER = process.env.SMTP_USER;
@@ -19,7 +18,6 @@ export default async function handler(req, res) {
   try {
     if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-    // Checagem de envs essenciais
     const missing = [];
     if (!SUPABASE_URL) missing.push("SUPABASE_URL");
     if (!SERVICE_ROLE_KEY) missing.push("SUPABASE_SERVICE_ROLE_KEY");
@@ -30,24 +28,21 @@ export default async function handler(req, res) {
     if (!SMTP_PASS) missing.push("SMTP_PASS");
     if (missing.length) return res.status(500).json({ error: `Variáveis ausentes: ${missing.join(", ")}` });
 
-    // Bearer do OWNER
     const authHeader = req.headers.authorization || "";
     if (!authHeader.startsWith("Bearer ")) return res.status(401).json({ error: "Missing Authorization Bearer token" });
     const access_token = authHeader.replace("Bearer ", "").trim();
 
-    // Body
     const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
     const { tenant_id, email, role, expires_in_days } = body;
     if (!tenant_id || !email || !role) return res.status(400).json({ error: "tenant_id, email e role são obrigatórios" });
     const days = Number(expires_in_days ?? 7);
     if (!Number.isFinite(days) || days < 1 || days > 30) return res.status(400).json({ error: "expires_in_days deve estar entre 1 e 30" });
 
-    // Client no contexto do USUÁRIO (OWNER) — para RLS e auth.uid() na RPC
+    // Client no contexto do OWNER (RLS)
     const userClient = createClient(SUPABASE_URL, ANON_KEY, {
       global: { headers: { Authorization: `Bearer ${access_token}` } },
     });
 
-    // Confirma sessão e valida OWNER aprovado no tenant
     const { data: userInfo, error: userErr } = await userClient.auth.getUser(access_token);
     if (userErr || !userInfo?.user?.id) return res.status(401).json({ error: "Sessão inválida ao obter usuário." });
 
@@ -61,7 +56,7 @@ export default async function handler(req, res) {
     if (ownerErr) return res.status(500).json({ error: `Erro ao validar owner: ${ownerErr.message}` });
     if (!ownerCheck || ownerCheck.length === 0) return res.status(403).json({ error: "Ação permitida apenas ao OWNER deste espaço." });
 
-    // 1) Gera o token do convite (RPC usa auth.uid())
+    // 1) Gera token do convite via RPC (usa auth.uid())
     const { data: tokenData, error: tokenErr } = await userClient.rpc("create_invite", {
       p_tenant_id: tenant_id,
       p_email: email,
@@ -72,12 +67,11 @@ export default async function handler(req, res) {
     const token = typeof tokenData === "string" ? tokenData : tokenData?.token;
     if (!token) return res.status(500).json({ error: "Token do convite não retornado pela RPC." });
 
-    // 2) Garante que o usuário exista no Auth; se já existir, segue
+    // 2) Garante usuário no Auth; se já existir, ok
     const adminAuth = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
-    await adminAuth.auth.admin.createUser({ email }).catch(() => { /* se já existe, ignora */ });
+    await adminAuth.auth.admin.createUser({ email }).catch(() => {});
 
-    // 3) Gera link de RECOVERY (definição de senha) com redirect para aceitar o convite
-    //    update-password.html tratará a troca de senha e depois levará para accept-invite.html?token=...
+    // 3) Link de definição de senha (recovery) com redirect para aceitar convite
     const nextAfterPassword = `/accept-invite.html?token=${encodeURIComponent(token)}`;
     const redirectTo = `${APP_BASE_URL}/update-password.html?next=${encodeURIComponent(nextAfterPassword)}`;
 
@@ -87,25 +81,31 @@ export default async function handler(req, res) {
       options: { redirectTo }
     });
     if (linkErr) {
-      // fallback: retorna link manual (para você mandar) + token
       return res.status(200).json({
         ok: true,
         emailSent: false,
         token,
+        actionLink: null,
         message: `Convite criado, mas falhou a geração do link de senha: ${linkErr.message}`
       });
     }
-
     const actionLink =
       linkData?.properties?.action_link || linkData?.action_link || linkData?.email_otp?.action_link;
 
-    // 4) Envia e-mail via SMTP (Nodemailer)
+    // 4) SMTP: verifica conexão e envia
     const transporter = nodemailer.createTransport({
       host: SMTP_HOST,
       port: SMTP_PORT,
       secure: SMTP_PORT === 465,
       auth: { user: SMTP_USER, pass: SMTP_PASS }
     });
+
+    try {
+      await transporter.verify();
+    } catch (vErr) {
+      console.error("SMTP verify error:", vErr);
+      return res.status(500).json({ error: `Falha SMTP (verify): ${vErr.message}`, token, actionLink });
+    }
 
     const html = `
       <p>Olá,</p>
@@ -118,17 +118,40 @@ export default async function handler(req, res) {
       <p>Caso não reconheça este convite, ignore este e-mail.</p>
     `;
 
-    await transporter.sendMail({
-      from: `"${FROM_NAME}" <${FROM_EMAIL}>`,
-      to: email,
-      subject: "CasaFin • Defina sua senha para acessar",
-      html
-    });
+    let info;
+    try {
+      info = await transporter.sendMail({
+        from: `"${FROM_NAME}" <${FROM_EMAIL}>`,
+        to: email,
+        subject: "CasaFin • Defina sua senha para acessar",
+        html
+      });
+      console.log("SMTP sendMail info:", {
+        messageId: info?.messageId,
+        accepted: info?.accepted,
+        rejected: info?.rejected
+      });
+    } catch (sendErr) {
+      console.error("SMTP sendMail error:", sendErr);
+      return res.status(200).json({
+        ok: true,
+        emailSent: false,
+        token,
+        actionLink,
+        message: `Convite criado, mas falhou o envio SMTP: ${sendErr.message}`
+      });
+    }
 
     return res.status(200).json({
       ok: true,
       emailSent: true,
       token,
+      actionLink,
+      smtp: {
+        messageId: info?.messageId || null,
+        accepted: info?.accepted || [],
+        rejected: info?.rejected || []
+      },
       message: "Convite gerado e e-mail enviado (definição de senha obrigatória)."
     });
   } catch (e) {
@@ -136,4 +159,3 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: `Falha inesperada: ${e?.message || e}` });
   }
 }
-
