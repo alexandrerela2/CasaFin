@@ -2,65 +2,74 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
-  <title>CasaFin • Entrada</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <script src="https://esm.sh/@supabase/supabase-js@2"></script>
-  <script src="./config.js"></script>
+  <title>CasaFin — Entrar</title>
   <style>
-    :root { --fg:#111; --muted:#666; --line:#eee; --bg:#fff; }
-    * { box-sizing:border-box }
-    body { font-family:system-ui,Segoe UI,Roboto,Arial; color:var(--fg); background:var(--bg);
-           max-width:420px; margin:56px auto; padding:0 16px }
-    h1 { margin:0 0 16px }
-    .card { border:1px solid var(--line); border-radius:14px; padding:16px; }
-    label { font-size:12px; color:var(--muted) }
-    input,button { width:100%; padding:10px; margin:8px 0 }
-    .hint { font-size:12px; color:var(--muted); text-align:center; margin-top:6px }
-    a { color:#246; text-decoration:underline }
+    body { font-family: system-ui, Arial, sans-serif; margin: 0; background:#f7f7fb; color:#1f2328; }
+    .wrap { max-width: 420px; margin: 8vh auto; background:#fff; padding:24px; border-radius:14px; box-shadow: 0 10px 30px rgba(0,0,0,.06); }
+    h1 { font-size: 20px; margin: 0 0 12px; }
+    p.sub { margin: 0 0 20px; color:#6a737d; }
+    label { font-size: 13px; color:#444; display:block; margin: 14px 0 6px; }
+    input { width: 100%; padding: 10px 12px; border:1px solid #d0d7de; border-radius:10px; font-size:14px; }
+    .row { display:flex; gap:10px; margin-top:16px; }
+    button { flex:1; padding:10px 12px; border:0; border-radius:10px; cursor:pointer; font-weight:600; }
+    .primary { background:#1f883d; color:#fff; }
+    .ghost { background:#eef2f7; color:#111; }
+    .link { display:inline-block; margin-top:12px; color:#0969da; text-decoration:none; font-size:14px; }
+    .muted { font-size:12px; color:#6a737d; margin-top:10px; }
   </style>
+  <!-- Config -->
+  <script src="./config.js"></script>
 </head>
 <body>
-  <h1>CasaFin</h1>
-  <form id="login-form" class="card">
-    <label>E-mail</label>
-    <input id="email" type="email" placeholder="seu@email.com" autocomplete="username" required />
-    <label>Senha</label>
-    <input id="password" type="password" placeholder="••••••••" autocomplete="current-password" required />
-    <button id="btn-login" type="submit">Entrar</button>
-    <div class="hint"><a href="./forgot-password.html">Esqueceu a senha?</a></div>
-  </form>
+  <div class="wrap">
+    <h1>Bem-vindo ao CasaFin</h1>
+    <p class="sub">Acesse sua conta para continuar.</p>
+
+    <label for="email">E-mail</label>
+    <input id="email" type="email" placeholder="voce@exemplo.com" autocomplete="email" />
+
+    <label for="password">Senha</label>
+    <input id="password" type="password" placeholder="••••••••" autocomplete="current-password" />
+
+    <div class="row">
+      <button id="btn-login" class="primary">Entrar</button>
+      <button id="btn-signup" class="ghost" title="Cadastro simples">Criar conta</button>
+    </div>
+
+    <a class="link" href="/forgot-password.html">Esqueci minha senha</a>
+    <p class="muted">Convites recebidos por e-mail abrem <code>accept-invite.html</code>.</p>
+  </div>
 
   <script type="module">
-    const { SUPABASE_URL, SUPABASE_ANON_KEY, APP_BASE_URL } = window.CASAFIN;
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    import { supabase } from "./lib/supabase.js";
+    import { redirectByRole } from "./lib/guard.js";
 
-    // já logado?
-    const { data: u0 } = await supabase.auth.getUser();
-    if (u0?.user) await postLoginRedirect();
+    // Se já logado, redireciona
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) redirectByRole();
 
-    document.getElementById('login-form').addEventListener('submit', async (e) => {
+    // Login
+    document.querySelector("#btn-login").addEventListener("click", async (e) => {
       e.preventDefault();
-      const email = document.getElementById('email').value.trim();
-      const password = document.getElementById('password').value.trim();
+      const email = document.querySelector("#email").value.trim();
+      const password = document.querySelector("#password").value;
+      if (!email || !password) return alert("Preencha e-mail e senha.");
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) return alert(error.message);
-      await postLoginRedirect();
+      await redirectByRole();
     });
 
-    async function postLoginRedirect() {
-      const { data: u } = await supabase.auth.getUser();
-      if (!u?.user) return;
-      const { data: ms, error } = await supabase
-        .from('memberships')
-        .select('role')
-        .eq('user_id', u.user.id)
-        .eq('approved', true);
-
-      if (error) return location.href = `${APP_BASE_URL}/app.html`;
-      const roles = (ms || []).map(m => m.role);
-      if (roles.includes('owner')) location.href = `${APP_BASE_URL}/owner-panel.html`;
-      else location.href = `${APP_BASE_URL}/app.html`;
-    }
+    // Cadastro simples (confirmação pode ser exigida via Supabase)
+    document.querySelector("#btn-signup").addEventListener("click", async (e) => {
+      e.preventDefault();
+      const email = document.querySelector("#email").value.trim();
+      const password = document.querySelector("#password").value;
+      if (!email || !password) return alert("Preencha e-mail e senha.");
+      const { data, error } = await supabase.auth.signUp({ email, password });
+      if (error) return alert(error.message);
+      alert("Conta criada. Verifique seu e-mail se for necessária confirmação.");
+    });
   </script>
 </body>
 </html>
