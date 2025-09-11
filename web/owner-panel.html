@@ -2,160 +2,123 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
-  <title>CasaFin • Painel do Owner</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <script src="https://esm.sh/@supabase/supabase-js@2"></script>
-  <script src="./config.js"></script>
+  <title>CasaFin — Painel do Dono</title>
   <style>
-    :root { --fg:#111; --muted:#666; --line:#eee; --bg:#fff; --pill:#f5f5f5; }
-    * { box-sizing:border-box }
-    body { font-family:system-ui,Segoe UI,Roboto,Arial; color:var(--fg); background:var(--bg);
-           max-width:1100px; margin:28px auto; padding:0 16px }
-    h1 { margin:0 0 8px } h3{margin:0 0 8px}
-    p { color:var(--muted) }
-    .bar { display:flex; align-items:center; justify-content:space-between; gap:12px }
-    .pill { background:var(--pill); border-radius:999px; padding:6px 10px; font-size:12px }
-    .card { border:1px solid var(--line); border-radius:14px; padding:16px; margin:16px 0 }
-    .grid { display:grid; gap:12px } .cols-2 { grid-template-columns:1fr 1fr }
-    input,select,button { padding:10px; margin:6px 0 }
-    table { width:100%; border-collapse:collapse }
-    th,td { text-align:left; padding:8px; border-bottom:1px solid var(--line) }
-    .mono { font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace }
-    .row { display:grid; grid-template-columns:1fr 1fr; gap:8px }
-    @media (max-width:920px){ .cols-2 { grid-template-columns:1fr } }
+    body { font-family: system-ui, Arial; margin:0; background:#fff; color:#1f2328; }
+    header { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid #eaeef2; }
+    h1 { font-size:18px; margin:0; }
+    main { padding:18px; }
+    label { display:block; font-size:13px; margin: 12px 0 6px; }
+    input, select { width:100%; padding:10px 12px; border:1px solid #d0d7de; border-radius:10px; }
+    .row { display:flex; gap:10px; }
+    button { padding:10px 12px; border:0; border-radius:10px; cursor:pointer; font-weight:600; background:#1f883d; color:#fff; }
+    .ghost { background:#eef2f7; color:#111; }
+    .table { margin-top:16px; border:1px solid #eaeef2; border-radius:10px; overflow:hidden; }
+    .table table { width:100%; border-collapse:collapse; }
+    .table th, .table td { padding:10px; border-bottom:1px solid #eaeef2; text-align:left; font-size:14px; }
   </style>
+  <script src="./config.js"></script>
 </head>
 <body>
-  <div class="bar">
+  <header>
+    <h1>CasaFin — Painel do Dono</h1>
     <div>
-      <h1>CasaFin • Painel do Owner</h1>
-      <p>Crie novas Casas (Tenants), defina o Admin e gerencie sua lista.</p>
-    </div>
-    <div>
-      <span class="pill" id="me-email">—</span>
+      <a class="ghost" href="/app.html" style="text-decoration:none; padding:8px 12px; border-radius:10px; background:#eef2f7; margin-right:10px;">App</a>
       <button id="btn-logout">Sair</button>
     </div>
-  </div>
+  </header>
 
-  <div class="card">
-    <h3>1) Criar nova Casa e informar o Admin</h3>
-    <div class="grid cols-2">
-      <div><label>Nome da Casa</label><input id="t-name" placeholder="Casa Zamboni" /></div>
-      <div><label>Slug (sem espaços)</label><input id="t-slug" placeholder="casa-zamboni" /></div>
-      <div><label>Passcode da Casa</label><input id="t-pass" placeholder="ex.: 1234" /></div>
-      <div><label>E-mail do Admin desta Casa</label><input id="t-admin-email" placeholder="admin@exemplo.com" /></div>
-    </div>
-    <div class="row">
-      <button id="btn-suggest-slug">Sugerir slug</button>
-      <button id="btn-create-tenant">Criar Casa + Convidar Admin</button>
-    </div>
-    <div id="invite-out" class="mono"></div>
-    <div id="test-out" class="mono" style="margin-top:8px; white-space:pre-wrap"></div>
-  </div>
+  <main>
+    <section>
+      <h2>Convites</h2>
+      <div class="row">
+        <div style="flex:2;">
+          <label>E-mail</label>
+          <input id="invite-email" type="email" placeholder="pessoa@exemplo.com" />
+        </div>
+        <div style="flex:1;">
+          <label>Papel</label>
+          <select id="invite-role">
+            <option value="admin">admin</option>
+            <option value="usuario">usuario</option>
+          </select>
+        </div>
+      </div>
+      <div class="row" style="margin-top:12px;">
+        <button id="btn-invite">Gerar convite</button>
+        <button id="btn-refresh" class="ghost">Atualizar lista</button>
+      </div>
 
-  <div class="card">
-    <h3>2) Minhas Casas (onde sou Owner)</h3>
-    <table>
-      <thead><tr><th>Nome</th><th>Slug</th><th>Status</th><th>Admins (convites)</th><th>Ações</th></tr></thead>
-      <tbody id="tenants-body"></tbody>
-    </table>
-    <button id="btn-reload">Recarregar lista</button>
-  </div>
+      <div class="table">
+        <table>
+          <thead><tr><th>E-mail</th><th>Papel</th><th>Status</th><th>Criado em</th></tr></thead>
+          <tbody id="invites-body"><tr><td colspan="4">Carregando…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
 
   <script type="module">
-    const { SUPABASE_URL, SUPABASE_ANON_KEY, APP_BASE_URL } = window.CASAFIN;
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    import { requireOwner, signOutAndGoHome } from "./lib/guard.js";
+    import { supabase } from "./lib/supabase.js";
 
-    // ---- GUARD: somente OWNER aprovado ----
-    const { data: me } = await supabase.auth.getUser();
-    if (!me?.user) { location.href = `${APP_BASE_URL}/index.html`; throw new Error('no-session'); }
-    const { data: owners, error: ownersErr } = await supabase
-      .from('memberships').select('tenant_id')
-      .eq('user_id', me.user.id).eq('approved', true).eq('role', 'owner');
-    if (ownersErr || !owners || owners.length === 0) {
-      location.href = `${APP_BASE_URL}/app.html`; throw new Error('not-owner');
-    }
-    document.getElementById('me-email').textContent = me.user.email;
+    await requireOwner();
+    document.getElementById("btn-logout").addEventListener("click", signOutAndGoHome);
 
-    // helpers
-    const $ = (s) => document.querySelector(s);
-    const slugify = (str)=> (str||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-      .toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'').slice(0,60);
+    const invitesBody = document.getElementById("invites-body");
 
-    document.getElementById('btn-logout').onclick = async () => {
-      await supabase.auth.signOut(); location.href = `${APP_BASE_URL}/index.html`;
-    };
-    document.getElementById('btn-suggest-slug').onclick = () => {
-      $('#t-slug').value = slugify($('#t-name').value);
-    };
-
-    // criar tenant + convite admin
-    document.getElementById('btn-create-tenant').onclick = async () => {
-      const name  = $('#t-name').value.trim();
-      const slug  = $('#t-slug').value.trim();
-      const pass  = $('#t-pass').value.trim();
-      const email = $('#t-admin-email').value.trim();
-      if (!name || !slug || !pass || !email) return alert('Preencha todos os campos.');
-      if (/\s/.test(slug)) return alert('Slug não pode ter espaços. Use hífens.');
-
-      $('#invite-out').textContent = 'Criando Casa...'; $('#test-out').textContent = '';
-      const { data, error } = await supabase.rpc('create_tenant_with_admin',
-        { _name: name, _slug: slug, _passcode: pass, _admin_email: email });
-      if (error) { $('#invite-out').textContent = ''; return alert(error.message); }
-
-      const link = `${APP_BASE_URL}/accept-invite.html?token=${data.admin_invite_token}`;
-      $('#invite-out').innerHTML = `Convite do Admin: <a href="${link}" target="_blank">${link}</a>\nExpira: ${new Date(data.expires_at).toLocaleString()}`;
-      await runPostCreateTest({ slug, adminEmail: email });
-      await loadOwnerTenants();
-    };
-
-    async function runPostCreateTest({ slug, adminEmail }) {
-      const log = [];
-      const { data: t1 } = await supabase.from('tenants').select('id, slug').eq('slug', slug).maybeSingle();
-      if (!t1) { log.push('❌ Tenant não encontrado.'); $('#test-out').textContent = log.join('\n'); return; }
-      log.push('✅ Tenant criado.');
-      const { data: m1 } = await supabase.from('memberships').select('role, approved').eq('tenant_id', t1.id).eq('user_id', me.user.id).maybeSingle();
-      log.push(m1 && m1.role==='owner' && m1.approved ? '✅ Membership de Owner aprovada.' : '❌ Membership de Owner ausente.');
-      const { data: inv } = await supabase.from('invites').select('email, role, expires_at').eq('tenant_id', t1.id).eq('email', adminEmail).order('created_at',{ascending:false}).limit(1).maybeSingle();
-      log.push(inv && inv.role==='admin' ? `✅ Convite de Admin (expira ${new Date(inv.expires_at).toLocaleString()}).` : '❌ Convite de Admin não encontrado.');
-      $('#test-out').textContent = log.join('\n');
-    }
-
-    async function loadOwnerTenants() {
+    async function loadInvites() {
+      invitesBody.innerHTML = "<tr><td colspan='4'>Carregando…</td></tr>";
       const { data, error } = await supabase
-        .from('memberships')
-        .select('tenant_id, tenants!inner(id, name, slug, is_paused)')
-        .eq('user_id', me.user.id).eq('approved', true).eq('role','owner')
-        .order('created_at', { ascending:false });
-      if (error) return alert(error.message);
-      const tbody = document.getElementById('tenants-body'); tbody.innerHTML = '';
-      for (const m of (data || [])) {
-        const t = m.tenants; const statusLabel = t.is_paused ? 'Pausado' : 'Ativo';
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${t.name}</td><td class="mono">${t.slug}</td><td>${statusLabel}</td><td>—</td>
-          <td><button data-act="toggle" data-id="${t.id}">${t.is_paused?'Retomar':'Pausar'}</button>
-              <button data-act="delete" data-id="${t.id}" style="margin-left:6px">Excluir</button></td>`;
-        tbody.appendChild(tr);
+        .from("invites")
+        .select("email, role, used_at, created_at")
+        .order("created_at", { ascending: false })
+        .limit(50);
+
+      if (error) {
+        invitesBody.innerHTML = `<tr><td colspan="4">Erro: ${error.message}</td></tr>`;
+        return;
       }
-      tbody.querySelectorAll('button').forEach(btn => btn.onclick = async () => {
-        const id = btn.getAttribute('data-id'); const act = btn.getAttribute('data-act');
-        if (act==='delete') {
-          if (!confirm('Tem certeza que deseja excluir esta Casa?')) return;
-          const { error } = await supabase.from('tenants').delete().eq('id', id);
-          if (error) return alert(error.message); loadOwnerTenants();
-        } else if (act==='toggle') {
-          // requer coluna is_paused; se não existir, crie no SQL Editor
-          const { data: row } = await supabase.from('tenants').select('is_paused').eq('id', id).maybeSingle();
-          if (typeof row?.is_paused !== 'boolean') return alert(
-            'Adicione a coluna is_paused:\n\nalter table public.tenants add column if not exists is_paused boolean not null default false;'
-          );
-          const { error } = await supabase.from('tenants').update({ is_paused: !row.is_paused }).eq('id', id);
-          if (error) return alert(error.message); loadOwnerTenants();
-        }
-      });
+      if (!data || !data.length) {
+        invitesBody.innerHTML = "<tr><td colspan='4'>Nenhum convite ainda.</td></tr>";
+        return;
+      }
+      invitesBody.innerHTML = data.map(row => {
+        const status = row.used_at ? "Usado" : "Pendente";
+        return `<tr>
+          <td>${row.email}</td>
+          <td>${row.role}</td>
+          <td>${status}</td>
+          <td>${new Date(row.created_at).toLocaleString("pt-BR")}</td>
+        </tr>`;
+      }).join("");
     }
-    document.getElementById('btn-reload').onclick = loadOwnerTenants;
-    await loadOwnerTenants();
+
+    async function createInvite() {
+      const email = document.getElementById("invite-email").value.trim();
+      const role = document.getElementById("invite-role").value;
+      if (!email) return alert("Informe o e-mail.");
+
+      // RPC da Etapa 2: create_invite(tenant_id?, email, role) — sua versão já define o tenant a partir do contexto
+      const { data, error } = await supabase.rpc("create_invite", { email, role });
+      if (error) return alert(error.message);
+
+      // data deve conter o token/link (sua RPC já pode retornar o link pronto).
+      // Caso retorne apenas o token, montamos o link:
+      const token = typeof data === "string" ? data : (data?.token || "");
+      const link = `${window.CASAFIN.APP_BASE_URL}/accept-invite.html?token=${encodeURIComponent(token)}`;
+
+      // Envio por e-mail: você pode colar o link manualmente ou implementar envio via SMTP no backend.
+      alert(`Convite criado!\n\nLink: ${link}\n\nEnvie este link para o convidado por e-mail.`);
+
+      await loadInvites();
+    }
+
+    document.getElementById("btn-invite").addEventListener("click", createInvite);
+    document.getElementById("btn-refresh").addEventListener("click", loadInvites);
+
+    await loadInvites();
   </script>
 </body>
 </html>
