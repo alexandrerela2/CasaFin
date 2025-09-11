@@ -1,54 +1,55 @@
 // web/api/owner-invite.js
 import { createClient } from "@supabase/supabase-js";
+import nodemailer from "nodemailer";
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const ANON_KEY = process.env.SUPABASE_ANON_KEY; // usado para contexto do usuário (RLS)
+const ANON_KEY = process.env.SUPABASE_ANON_KEY;
 const APP_BASE_URL = process.env.APP_BASE_URL || "https://casa-fin.vercel.app";
+
+// SMTP (para envio do e-mail com link de definição de senha)
+const SMTP_HOST = process.env.SMTP_HOST;
+const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
+const SMTP_USER = process.env.SMTP_USER;
+const SMTP_PASS = process.env.SMTP_PASS;
+const FROM_NAME  = process.env.FROM_NAME  || "CasaFin";
+const FROM_EMAIL = process.env.FROM_EMAIL || SMTP_USER;
 
 export default async function handler(req, res) {
   try {
-    if (req.method !== "POST") {
-      return res.status(405).json({ error: "Method not allowed" });
-    }
+    if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-    // 0) Checagem de env vars
+    // Checagem de envs essenciais
     const missing = [];
     if (!SUPABASE_URL) missing.push("SUPABASE_URL");
     if (!SERVICE_ROLE_KEY) missing.push("SUPABASE_SERVICE_ROLE_KEY");
     if (!ANON_KEY) missing.push("SUPABASE_ANON_KEY");
-    if (missing.length) {
-      return res.status(500).json({ error: `Variáveis ausentes: ${missing.join(", ")}` });
-    }
+    if (!SMTP_HOST) missing.push("SMTP_HOST");
+    if (!SMTP_PORT) missing.push("SMTP_PORT");
+    if (!SMTP_USER) missing.push("SMTP_USER");
+    if (!SMTP_PASS) missing.push("SMTP_PASS");
+    if (missing.length) return res.status(500).json({ error: `Variáveis ausentes: ${missing.join(", ")}` });
 
-    // 1) Token do usuário (OWNER) enviado pelo front
+    // Bearer do OWNER
     const authHeader = req.headers.authorization || "";
-    if (!authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({ error: "Missing Authorization Bearer token" });
-    }
+    if (!authHeader.startsWith("Bearer ")) return res.status(401).json({ error: "Missing Authorization Bearer token" });
     const access_token = authHeader.replace("Bearer ", "").trim();
 
-    // 2) Corpo
+    // Body
     const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
     const { tenant_id, email, role, expires_in_days } = body;
-    if (!tenant_id || !email || !role) {
-      return res.status(400).json({ error: "tenant_id, email e role são obrigatórios" });
-    }
+    if (!tenant_id || !email || !role) return res.status(400).json({ error: "tenant_id, email e role são obrigatórios" });
     const days = Number(expires_in_days ?? 7);
-    if (!Number.isFinite(days) || days < 1 || days > 30) {
-      return res.status(400).json({ error: "expires_in_days deve estar entre 1 e 30" });
-    }
+    if (!Number.isFinite(days) || days < 1 || days > 30) return res.status(400).json({ error: "expires_in_days deve estar entre 1 e 30" });
 
-    // 3) Client no CONTEXTO DO USUÁRIO (RLS) — importante para que auth.uid() funcione na RPC
+    // Client no contexto do USUÁRIO (OWNER) — para RLS e auth.uid() na RPC
     const userClient = createClient(SUPABASE_URL, ANON_KEY, {
       global: { headers: { Authorization: `Bearer ${access_token}` } },
     });
 
-    // 3.1) Obter user_id e validar que é OWNER aprovado do tenant
+    // Confirma sessão e valida OWNER aprovado no tenant
     const { data: userInfo, error: userErr } = await userClient.auth.getUser(access_token);
-    if (userErr || !userInfo?.user?.id) {
-      return res.status(401).json({ error: "Sessão inválida ao obter usuário (auth.getUser)." });
-    }
+    if (userErr || !userInfo?.user?.id) return res.status(401).json({ error: "Sessão inválida ao obter usuário." });
 
     const { data: ownerCheck, error: ownerErr } = await userClient
       .from("memberships")
@@ -57,55 +58,82 @@ export default async function handler(req, res) {
       .eq("role", "owner")
       .eq("approved", true)
       .limit(1);
+    if (ownerErr) return res.status(500).json({ error: `Erro ao validar owner: ${ownerErr.message}` });
+    if (!ownerCheck || ownerCheck.length === 0) return res.status(403).json({ error: "Ação permitida apenas ao OWNER deste espaço." });
 
-    if (ownerErr) {
-      return res.status(500).json({ error: `Erro ao validar owner: ${ownerErr.message}` });
-    }
-    if (!ownerCheck || ownerCheck.length === 0) {
-      return res.status(403).json({ error: "Ação permitida apenas ao OWNER deste espaço." });
-    }
-
-    // 4) Gerar token de convite via RPC **no contexto do usuário**
-    //    (a função no banco usa auth.uid(); aqui ele estará preenchido)
+    // 1) Gera o token do convite (RPC usa auth.uid())
     const { data: tokenData, error: tokenErr } = await userClient.rpc("create_invite", {
       p_tenant_id: tenant_id,
       p_email: email,
       p_role: role,
       p_expires_in_days: days,
     });
-    if (tokenErr) {
-      return res.status(500).json({ error: `Erro ao gerar token: ${tokenErr.message}` });
-    }
+    if (tokenErr) return res.status(500).json({ error: `Erro ao gerar token: ${tokenErr.message}` });
     const token = typeof tokenData === "string" ? tokenData : tokenData?.token;
     if (!token) return res.status(500).json({ error: "Token do convite não retornado pela RPC." });
 
-    // 5) Enviar e-mail de convite via Supabase Auth (usa SERVICE ROLE)
+    // 2) Garante que o usuário exista no Auth; se já existir, segue
     const adminAuth = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
-    const redirectTo = `${APP_BASE_URL}/accept-invite.html?token=${encodeURIComponent(token)}`;
-    const { data: inviteResp, error: inviteErr } =
-      await adminAuth.auth.admin.inviteUserByEmail(email, { redirectTo });
+    await adminAuth.auth.admin.createUser({ email }).catch(() => { /* se já existe, ignora */ });
 
-    // Se o e-mail falhar (ex.: usuário já existe), retornamos ok com fallback manual
-    if (inviteErr) {
-      console.warn("Falha ao enviar e-mail de convite:", inviteErr);
+    // 3) Gera link de RECOVERY (definição de senha) com redirect para aceitar o convite
+    //    update-password.html tratará a troca de senha e depois levará para accept-invite.html?token=...
+    const nextAfterPassword = `/accept-invite.html?token=${encodeURIComponent(token)}`;
+    const redirectTo = `${APP_BASE_URL}/update-password.html?next=${encodeURIComponent(nextAfterPassword)}`;
+
+    const { data: linkData, error: linkErr } = await adminAuth.auth.admin.generateLink({
+      type: "recovery",
+      email,
+      options: { redirectTo }
+    });
+    if (linkErr) {
+      // fallback: retorna link manual (para você mandar) + token
       return res.status(200).json({
         ok: true,
         emailSent: false,
         token,
-        message: `Convite criado, mas falhou o envio automático: ${inviteErr.message}`,
+        message: `Convite criado, mas falhou a geração do link de senha: ${linkErr.message}`
       });
     }
 
-    // 6) Sucesso
+    const actionLink =
+      linkData?.properties?.action_link || linkData?.action_link || linkData?.email_otp?.action_link;
+
+    // 4) Envia e-mail via SMTP (Nodemailer)
+    const transporter = nodemailer.createTransport({
+      host: SMTP_HOST,
+      port: SMTP_PORT,
+      secure: SMTP_PORT === 465,
+      auth: { user: SMTP_USER, pass: SMTP_PASS }
+    });
+
+    const html = `
+      <p>Olá,</p>
+      <p>Você foi convidado para acessar o <strong>CasaFin</strong>.</p>
+      <p><strong>Antes de entrar, defina sua senha</strong> clicando no botão abaixo:</p>
+      <p><a href="${actionLink}" style="display:inline-block;padding:10px 14px;border-radius:8px;background:#1f883d;color:#fff;text-decoration:none" target="_blank" rel="noopener">Definir senha e entrar</a></p>
+      <p>Se o botão não funcionar, copie e cole este link no navegador:</p>
+      <p style="word-break:break-all">${actionLink}</p>
+      <hr/>
+      <p>Caso não reconheça este convite, ignore este e-mail.</p>
+    `;
+
+    await transporter.sendMail({
+      from: `"${FROM_NAME}" <${FROM_EMAIL}>`,
+      to: email,
+      subject: "CasaFin • Defina sua senha para acessar",
+      html
+    });
+
     return res.status(200).json({
       ok: true,
       emailSent: true,
       token,
-      userId: inviteResp?.user?.id || null,
-      message: "Convite gerado e e-mail enviado.",
+      message: "Convite gerado e e-mail enviado (definição de senha obrigatória)."
     });
   } catch (e) {
     console.error(e);
     return res.status(500).json({ error: `Falha inesperada: ${e?.message || e}` });
   }
 }
+
