@@ -68,128 +68,122 @@
       </div>
     </section>
   </main>
+<script type="module">
+  import { requireOwner, signOutAndGoHome } from "./lib/guard.js";
+  import { supabase } from "./lib/supabase.js";
 
-  <script type="module">
-    import { requireOwner, signOutAndGoHome } from "./lib/guard.js";
-    import { supabase } from "./lib/supabase.js";
+  (async () => {
+    await requireOwner();
+    document.getElementById("btn-logout").addEventListener("click", signOutAndGoHome);
 
-    (async () => {
+    const invitesBody = document.getElementById("invites-body");
+    const btnInvite = document.getElementById("btn-invite");
+    const btnRefresh = document.getElementById("btn-refresh");
+    const inputEmail = document.getElementById("invite-email");
+
+    async function getOwnerTenantId() {
+      const { data, error } = await supabase
+        .from("memberships")
+        .select("tenant_id")
+        .eq("approved", true)
+        .eq("role", "owner")
+        .limit(1)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      return data?.tenant_id || null;
+    }
+    let TENANT_ID = await getOwnerTenantId();
+    if (!TENANT_ID) {
+      invitesBody.innerHTML = "<tr><td colspan='4'>OWNER sem tenant aprovado.</td></tr>";
+      return;
+    }
+
+    async function loadInvites() {
+      invitesBody.innerHTML = "<tr><td colspan='4'>Carregando…</td></tr>";
+      const { data, error } = await supabase
+        .from("invites")
+        .select("email, role, used_at, created_at, tenant_id")
+        .eq("tenant_id", TENANT_ID)
+        .order("created_at", { ascending: false })
+        .limit(50);
+
+      if (error) {
+        invitesBody.innerHTML = `<tr><td colspan="4">Erro: ${error.message}</td></tr>`;
+        return;
+      }
+      if (!data || !data.length) {
+        invitesBody.innerHTML = "<tr><td colspan='4'>Nenhum convite ainda.</td></tr>";
+        return;
+      }
+      invitesBody.innerHTML = data.map(row => {
+        const status = row.used_at ? "Usado" : "Pendente";
+        const created = row.created_at ? new Date(row.created_at).toLocaleString("pt-BR") : "-";
+        return `<tr>
+          <td>${row.email}</td>
+          <td>${row.role}</td>
+          <td>${status}</td>
+          <td>${created}</td>
+        </tr>`;
+      }).join("");
+    }
+
+    async function createInvite() {
+      const email = inputEmail.value.trim();
+      const role = document.getElementById("invite-role").value;
+      const days = parseInt(document.getElementById("invite-days").value, 10) || 7;
+
+      if (!email) return alert("Informe o e-mail.");
+      if (!["admin","usuario"].includes(role)) return alert("Papel inválido.");
+      if (days < 1 || days > 30) return alert("Validade deve ser entre 1 e 30 dias.");
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return alert("Sessão inválida. Faça login novamente.");
+
+      btnInvite.disabled = true; btnRefresh.disabled = true;
+
       try {
-        await requireOwner();
-        document.getElementById("btn-logout").addEventListener("click", signOutAndGoHome);
+        const resp = await fetch("/api/owner-invite", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${session.access_token}`
+          },
+          body: JSON.stringify({ tenant_id: TENANT_ID, email, role, expires_in_days: days })
+        });
+        const js = await resp.json();
 
-        const invitesBody = document.getElementById("invites-body");
-
-        async function getOwnerTenantId() {
-          const { data, error } = await supabase
-            .from("memberships")
-            .select("tenant_id")
-            .eq("approved", true)
-            .eq("role", "owner")
-            .limit(1)
-            .maybeSingle();
-          if (error) throw new Error(error.message);
-          return data?.tenant_id || null;
-        }
-
-        let TENANT_ID = await getOwnerTenantId();
-        if (!TENANT_ID) {
-          invitesBody.innerHTML = "<tr><td colspan='4'>OWNER sem tenant aprovado.</td></tr>";
+        if (!resp.ok) {
+          console.error(js);
+          alert(js?.error || "Erro ao criar e enviar convite.");
           return;
         }
 
-        async function loadInvites() {
-          try {
-            invitesBody.innerHTML = "<tr><td colspan='4'>Carregando…</td></tr>";
-            const { data, error } = await supabase
-              .from("invites")
-              .select("email, role, used_at, created_at, tenant_id")
-              .eq("tenant_id", TENANT_ID)
-              .order("created_at", { ascending: false })
-              .limit(50);
-
-            if (error) {
-              invitesBody.innerHTML = `<tr><td colspan="4">Erro: ${error.message}</td></tr>`;
-              return;
-            }
-            if (!data || !data.length) {
-              invitesBody.innerHTML = "<tr><td colspan='4'>Nenhum convite ainda.</td></tr>";
-              return;
-            }
-            invitesBody.innerHTML = data.map(row => {
-              const status = row.used_at ? "Usado" : "Pendente";
-              const created = row.created_at ? new Date(row.created_at).toLocaleString("pt-BR") : "-";
-              return `<tr>
-                <td>${row.email}</td>
-                <td>${row.role}</td>
-                <td>${status}</td>
-                <td>${created}</td>
-              </tr>`;
-            }).join("");
-          } catch (err) {
-            console.error("[loadInvites] ", err);
-            invitesBody.innerHTML = `<tr><td colspan="4">Erro inesperado ao carregar convites.</td></tr>`;
-          }
+        // Mostra ação realizada e oferece o link (independente do envio) para debug
+        if (js.emailSent === true) {
+          alert("Convite criado e e-mail enviado com sucesso!");
+        } else {
+          const link = js.actionLink || `${window.CASAFIN.APP_BASE_URL}/update-password.html`;
+          try { await navigator.clipboard.writeText(link); } catch {}
+          alert(`Convite criado, mas o e-mail não pôde ser enviado automaticamente.\n\nLink copiado:\n${link}\n\nMotivo: ${js.message || "SMTP"}`);
         }
 
-        async function createInvite() {
-          const email = document.getElementById("invite-email").value.trim();
-          const role = document.getElementById("invite-role").value;
-          const days = parseInt(document.getElementById("invite-days").value, 10) || 7;
-
-          if (!email) return alert("Informe o e-mail.");
-          if (!["admin","usuario"].includes(role)) return alert("Papel inválido.");
-          if (days < 1 || days > 30) return alert("Validade deve ser entre 1 e 30 dias.");
-
-          const { data: { session } } = await supabase.auth.getSession();
-          if (!session?.access_token) return alert("Sessão inválida. Faça login novamente.");
-
-          try {
-            const resp = await fetch("/api/owner-invite", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${session.access_token}`
-              },
-              body: JSON.stringify({
-                tenant_id: TENANT_ID,
-                email,
-                role,
-                expires_in_days: days
-              })
-            });
-
-            const js = await resp.json();
-            if (!resp.ok) {
-              console.error(js);
-              return alert(js?.error || "Erro ao criar e enviar convite.");
-            }
-
-            // Sucesso: com ou sem e-mail automático
-            if (js.emailSent === false && js.token) {
-              const link = `${window.CASAFIN.APP_BASE_URL}/accept-invite.html?token=${encodeURIComponent(js.token)}`;
-              try { await navigator.clipboard.writeText(link); } catch {}
-              alert(`Convite criado, mas o e-mail automático falhou.\n\nO link foi copiado para a área de transferência:\n${link}`);
-            } else {
-              alert("Convite criado e e-mail enviado com sucesso!");
-            }
-
-            await loadInvites();
-          } catch (e) {
-            console.error(e);
-            alert("Falha ao comunicar com a API de convite.");
-          }
-        }
-
-        document.getElementById("btn-invite").addEventListener("click", createInvite);
-        document.getElementById("btn-refresh").addEventListener("click", loadInvites);
-
+        // limpa o campo de e-mail após sucesso
+        inputEmail.value = "";
         await loadInvites();
-      } catch (err) {
-        console.error(err);
-        alert("Erro ao inicializar o Painel do Dono.");
+      } catch (e) {
+        console.error(e);
+        alert("Falha ao comunicar com a API de convite.");
+      } finally {
+        btnInvite.disabled = false; btnRefresh.disabled = false;
       }
-    })();
-  </script>
+    }
+
+    document.getElementById("btn-invite").addEventListener("click", createInvite);
+    document.getElementById("btn-refresh").addEventListener("click", loadInvites);
+
+    await loadInvites();
+  })();
+</script>
+
 </body>
 </html>
