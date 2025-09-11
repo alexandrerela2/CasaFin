@@ -7,38 +7,23 @@
   <style>
     body { font-family: system-ui, Arial; margin:0; background:#fff; color:#1f2328; }
     header { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid #eaeef2; }
-    h1 { font-size:18px; margin:0; }
-    main { padding:18px; }
-    button { padding:8px 12px; border:0; border-radius:10px; background:#eaeef2; cursor:pointer; }
-    .primary { background:#1f883d; color:#fff; }
-    a { color:#0969da; text-decoration:none; }
+    main { padding:18px; max-width:980px; margin:0 auto; }
+    button { padding:10px 12px; border:0; border-radius:10px; cursor:pointer; font-weight:600; background:#eef2f7; }
   </style>
   <script src="./config.js"></script>
 </head>
 <body>
   <header>
-    <h1>CasaFin — Painel</h1>
-    <div>
-      <a href="/owner-panel.html" id="owner-link" style="display:none; margin-right:10px;">Painel do Dono</a>
-      <button id="btn-logout">Sair</button>
-    </div>
+    <strong>CasaFin — App</strong>
+    <button id="btn-logout">Sair</button>
   </header>
-
   <main>
-    <p>🚧 Aqui ficará o app financeiro (CRUD de lançamentos, resumos diários, etc.).</p>
-    <p>Etapa 4 irá preencher esta tela.</p>
+    <p>Bem-vindo! (usuários não-owner chegam aqui)</p>
   </main>
 
   <script type="module">
-    import { requireAuth, signOutAndGoHome, getPrimaryRole } from "./lib/guard.js";
+    import { requireAuth, signOutAndGoHome } from "./lib/guard.js";
     await requireAuth();
-
-    // Mostrar link do owner se aplicável
-    const role = await getPrimaryRole();
-    if (role === "owner") {
-      document.getElementById("owner-link").style.display = "inline-block";
-    }
-
     document.getElementById("btn-logout").addEventListener("click", signOutAndGoHome);
   </script>
 </body>
