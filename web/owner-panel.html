@@ -73,7 +73,6 @@
     import { requireOwner, signOutAndGoHome } from "./lib/guard.js";
     import { supabase } from "./lib/supabase.js";
 
-    // Inicialização em IIFE para compatibilidade
     (async () => {
       try {
         await requireOwner();
@@ -166,7 +165,15 @@
               return alert(js?.error || "Erro ao criar e enviar convite.");
             }
 
-            alert("Convite criado e e-mail enviado com sucesso!");
+            // Sucesso: com ou sem e-mail automático
+            if (js.emailSent === false && js.token) {
+              const link = `${window.CASAFIN.APP_BASE_URL}/accept-invite.html?token=${encodeURIComponent(js.token)}`;
+              try { await navigator.clipboard.writeText(link); } catch {}
+              alert(`Convite criado, mas o e-mail automático falhou.\n\nO link foi copiado para a área de transferência:\n${link}`);
+            } else {
+              alert("Convite criado e e-mail enviado com sucesso!");
+            }
+
             await loadInvites();
           } catch (e) {
             console.error(e);
