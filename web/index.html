@@ -14,7 +14,6 @@
     .row { display:flex; gap:10px; margin-top:16px; }
     button { flex:1; padding:10px 12px; border:0; border-radius:10px; cursor:pointer; font-weight:600; }
     .primary { background:#1f883d; color:#fff; }
-    .ghost { background:#eef2f7; color:#111; }
     .link { display:inline-block; margin-top:12px; color:#0969da; text-decoration:none; font-size:14px; }
     .muted { font-size:12px; color:#6a737d; margin-top:10px; }
   </style>
@@ -26,50 +25,41 @@
     <h1>Bem-vindo ao CasaFin</h1>
     <p class="sub">Acesse sua conta para continuar.</p>
 
-    <label for="email">E-mail</label>
-    <input id="email" type="email" placeholder="voce@exemplo.com" autocomplete="email" />
+    <form id="login-form">
+      <label for="email">E-mail</label>
+      <input id="email" type="email" placeholder="voce@exemplo.com" autocomplete="email" required />
 
-    <label for="password">Senha</label>
-    <input id="password" type="password" placeholder="••••••••" autocomplete="current-password" />
+      <label for="password">Senha</label>
+      <input id="password" type="password" placeholder="••••••••" autocomplete="current-password" required />
 
-    <div class="row">
-      <button id="btn-login" class="primary">Entrar</button>
-      <button id="btn-signup" class="ghost" title="Cadastro simples">Criar conta</button>
-    </div>
+      <div class="row">
+        <button id="btn-login" class="primary" type="submit">Entrar</button>
+      </div>
+    </form>
 
     <a class="link" href="/forgot-password.html">Esqueci minha senha</a>
-    <p class="muted">Convites recebidos por e-mail abrem <code>accept-invite.html</code>.</p>
+    <p class="muted">Acesso somente por convite. Solicite ao administrador do seu espaço.</p>
   </div>
 
   <script type="module">
     import { supabase } from "./lib/supabase.js";
     import { redirectByRole } from "./lib/guard.js";
 
-    // Se já logado, redireciona
+    // Se já está logado, redireciona
     const { data: { session } } = await supabase.auth.getSession();
     if (session) redirectByRole();
 
-    // Login
-    document.querySelector("#btn-login").addEventListener("click", async (e) => {
+    // Login (submit do formulário)
+    const form = document.getElementById("login-form");
+    form.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const email = document.querySelector("#email").value.trim();
-      const password = document.querySelector("#password").value;
-      if (!email || !password) return alert("Preencha e-mail e senha.");
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) return alert(error.message);
       await redirectByRole();
     });
-
-    // Cadastro simples (confirmação pode ser exigida via Supabase)
-    document.querySelector("#btn-signup").addEventListener("click", async (e) => {
-      e.preventDefault();
-      const email = document.querySelector("#email").value.trim();
-      const password = document.querySelector("#password").value;
-      if (!email || !password) return alert("Preencha e-mail e senha.");
-      const { data, error } = await supabase.auth.signUp({ email, password });
-      if (error) return alert(error.message);
-      alert("Conta criada. Verifique seu e-mail se for necessária confirmação.");
-    });
   </script>
 </body>
 </html>
+
