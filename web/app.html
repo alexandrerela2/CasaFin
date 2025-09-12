@@ -1,31 +1,254 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="pt-br">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>CasaFin — App</title>
+  <title>CasaFin — App Financeiro</title>
+
+  <!-- Fonte padrão -->
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600;800&display=swap" rel="stylesheet">
+
   <style>
-    body { font-family: system-ui, Arial; margin:0; background:#fff; color:#1f2328; }
-    header { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid #eaeef2; }
-    main { padding:18px; max-width:980px; margin:0 auto; }
-    button { padding:10px 12px; border:0; border-radius:10px; cursor:pointer; font-weight:600; background:#eef2f7; }
+    :root{
+      /* Tema padrão (pode ser sobrescrito via tenant_preferences pelo app-config.js) */
+      --primary:#862222; --bg:#f7f7f9; --card:#ffffff; --muted:#b8c0cc; --ok:#1d9f6e; --bad:#c0392b;
+      --text:#111; --border:#ececf2;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      font-family:"Nunito Sans",system-ui,-apple-system,Segoe UI,Roboto,Ubuntu;
+      margin:0; background:var(--bg); color:var(--text);
+    }
+    a{color:inherit}
+
+    /* Header */
+    header.appbar{
+      display:flex; align-items:center; justify-content:space-between;
+      padding:16px 20px; background:var(--card);
+      box-shadow:0 1px 8px rgba(0,0,0,.06); position:sticky; top:0; z-index:20;
+      border-bottom:1px solid var(--border);
+    }
+    .logo{font-weight:800; letter-spacing:.3px}
+    .right{display:flex; align-items:center; gap:8px}
+    .pill{padding:6px 10px; border:1px solid #e5e7eb; border-radius:999px; background:#fff; color:#333}
+
+    /* Tabs */
+    nav.tabs{display:flex; gap:8px; padding:12px 16px}
+    .tab{
+      padding:10px 14px; border-radius:10px; background:#fff; border:1px solid #e7e7ea; cursor:pointer;
+      user-select:none;
+    }
+    .tab.active{background:var(--primary); color:#fff; border-color:var(--primary)}
+    .hide{display:none}
+
+    /* Layout principal */
+    main{padding:12px 16px; max-width:1100px; margin:0 auto}
+    .grid{display:grid; gap:12px}
+    .grid.cards{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+    .card{
+      background:var(--card); border:1px solid var(--border);
+      border-radius:16px; box-shadow:0 1px 6px rgba(0,0,0,.04);
+    }
+    .card > header{
+      display:flex; justify-content:space-between; align-items:center;
+      padding:12px 16px; border-bottom:1px solid #f0f2f5
+    }
+    .card .content{padding:12px 16px}
+
+    /* Tabela */
+    table{width:100%; border-collapse:collapse}
+    th,td{padding:10px; border-bottom:1px solid #f0f2f5; text-align:left}
+    th{font-weight:600; color:#333}
+
+    /* Inputs e botões */
+    input,select,button{font-family:inherit}
+    .row{display:flex; gap:8px; flex-wrap:wrap}
+    .row>*{flex:1 1 160px}
+    .btn{padding:10px 14px; border-radius:10px; border:1px solid #e0e0e6; background:#fff; cursor:pointer}
+    .btn.primary{background:var(--primary); color:#fff; border-color:var(--primary)}
+
+    /* Cores de valores */
+    .money.ok{color:var(--ok)}
+    .money.bad{color:var(--bad)}
+    .muted{color:var(--muted)}
+
+    /* Rodapé (opcional) */
+    footer.appfoot{padding:16px; text-align:center; color:var(--muted)}
   </style>
-  <script src="./config.js"></script>
 </head>
 <body>
-  <header>
-    <strong>CasaFin — App</strong>
-    <button id="btn-logout">Sair</button>
+  <!-- App Bar -->
+  <header class="appbar">
+    <div class="logo">CasaFin — App</div>
+    <div class="right">
+      <span id="tenantName" class="pill">Tenant: …</span>
+      <button id="btnSignOut" class="btn">Sair</button>
+    </div>
   </header>
+
+  <!-- Tabs -->
+  <nav class="tabs">
+    <button class="tab active" data-tab="dashboard">Dashboard</button>
+    <button class="tab" data-tab="receitas">Receitas</button>
+    <button class="tab" data-tab="despesas">Despesas</button>
+    <button id="tabConfig" class="tab hide" data-tab="config">Configurações</button>
+  </nav>
+
+  <!-- Conteúdo -->
   <main>
-    <p>Bem-vindo! (usuários não-owner chegam aqui)</p>
+    <!-- DASHBOARD -->
+    <section id="tab-dashboard" class="grid">
+      <!-- Cards -->
+      <div class="grid cards">
+        <div class="card">
+          <header><b>Entradas (período)</b><span id="sumIncome" class="money ok">R$ 0,00</span></header>
+          <div class="content"><div class="muted">Use o filtro para escolher o período.</div></div>
+        </div>
+        <div class="card">
+          <header><b>Saídas (período)</b><span id="sumExpense" class="money bad">R$ 0,00</span></header>
+          <div class="content"></div>
+        </div>
+        <div class="card">
+          <header><b>Saldo (período)</b><span id="sumBalance" class="money">R$ 0,00</span></header>
+          <div class="content"></div>
+        </div>
+      </div>
+
+      <!-- Filtro + Lista -->
+      <div class="card">
+        <header>
+          <div class="row" style="width:100%">
+            <select id="filterPeriod" title="Período">
+              <option value="today">Hoje</option>
+              <option value="week">Semana</option>
+              <option value="month" selected>Mês</option>
+              <option value="custom">Personalizado</option>
+            </select>
+            <input id="filterFrom" type="date" />
+            <input id="filterTo" type="date" />
+            <div style="flex:1"></div>
+            <button id="btnRefresh" class="btn">Atualizar</button>
+          </div>
+        </header>
+        <div class="content">
+          <table>
+            <thead>
+              <tr>
+                <th>Data</th><th>Tipo</th><th>Categoria</th><th>Descrição</th><th>Valor</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="tblEntries"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Novo lançamento -->
+      <div class="card">
+        <header><b>Novo lançamento</b></header>
+        <div class="content">
+          <div class="row">
+            <input id="fDate" type="date" />
+            <select id="fType">
+              <option value="income">Receita</option>
+              <option value="expense">Despesa</option>
+              <option value="transfer">Transferência</option>
+            </select>
+            <select id="fCategory" title="Categoria"></select>
+            <input id="fDesc" placeholder="Descrição" />
+            <input id="fAmount" type="number" step="0.01" placeholder="Valor (ex.: 120.50)" />
+            <button id="btnCreate" class="btn primary">Salvar</button>
+          </div>
+          <small class="muted">* Transferências não entram no resumo diário (por enquanto).</small>
+        </div>
+      </div>
+    </section>
+
+    <!-- RECEITAS -->
+    <section id="tab-receitas" class="grid" style="display:none">
+      <div class="card">
+        <header><b>Receitas</b><span class="muted">CRUD</span></header>
+        <div class="content">
+          <div class="row">
+            <input id="riDate" type="date" />
+            <select id="riCategory" title="Categoria"></select>
+            <input id="riDesc" placeholder="Descrição" />
+            <input id="riAmount" type="number" step="0.01" placeholder="Valor" />
+            <button id="btnRiCreate" class="btn primary">Adicionar</button>
+          </div>
+          <table style="margin-top:12px">
+            <thead><tr><th>Data</th><th>Categoria</th><th>Descrição</th><th>Valor</th><th></th></tr></thead>
+            <tbody id="tblIncome"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- DESPESAS -->
+    <section id="tab-despesas" class="grid" style="display:none">
+      <div class="card">
+        <header><b>Despesas</b><span class="muted">CRUD</span></header>
+        <div class="content">
+          <div class="row">
+            <input id="reDate" type="date" />
+            <select id="reCategory" title="Categoria"></select>
+            <input id="reDesc" placeholder="Descrição" />
+            <input id="reAmount" type="number" step="0.01" placeholder="Valor" />
+            <button id="btnReCreate" class="btn primary">Adicionar</button>
+          </div>
+          <table style="margin-top:12px">
+            <thead><tr><th>Data</th><th>Categoria</th><th>Descrição</th><th>Valor</th><th></th></tr></thead>
+            <tbody id="tblExpense"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- CONFIGURAÇÕES (ADM/OWNER) -->
+    <section id="tab-config" class="grid" style="display:none">
+      <div class="card">
+        <header><b>Configurações do Tenant</b><span class="muted">Apenas ADM/OWNER</span></header>
+        <div class="content">
+          <!-- Tema -->
+          <h3>Tema/cores</h3>
+          <div class="row">
+            <label style="flex:0 0 160px">Primária <input id="themePrimary" type="color" value="#862222" /></label>
+            <label style="flex:0 0 160px">Fundo <input id="themeBg" type="color" value="#f7f7f9" /></label>
+            <button id="btnSaveTheme" class="btn">Salvar tema</button>
+          </div>
+
+          <!-- Categorias -->
+          <h3 style="margin-top:20px">Categorias</h3>
+          <div class="row">
+            <select id="catKind" title="Tipo de categoria">
+              <option value="income">Receita</option>
+              <option value="expense" selected>Despesa</option>
+            </select>
+            <input id="catName" placeholder="Nome da categoria" />
+            <button id="btnAddCategory" class="btn">Adicionar</button>
+          </div>
+          <table style="margin-top:12px">
+            <thead><tr><th>Tipo</th><th>Nome</th><th>Status</th><th></th></tr></thead>
+            <tbody id="tblCategories"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
   </main>
 
-  <script type="module">
-    import { requireAuth, signOutAndGoHome } from "./lib/guard.js";
-    await requireAuth();
-    document.getElementById("btn-logout").addEventListener("click", signOutAndGoHome);
-  </script>
+  <footer class="appfoot">
+    CasaFin — Etapa 4A • CRUD + Resumos • ©
+  </footer>
+
+  <!-- Scripts (ordem importa) -->
+  <!-- 1) Config do projeto (URL/KEY) -->
+  <script src="./config.js"></script>
+  <!-- 2) Cliente Supabase helper do projeto -->
+  <script type="module" src="./lib/supabase.js"></script>
+  <!-- 3) Lógica das abas de lançamentos / dashboard -->
+  <script type="module" src="./js/app-entries.js"></script>
+  <!-- 4) Lógica de Configurações (tema + categorias) -->
+  <script type="module" src="./js/app-config.js"></script>
 </body>
 </html>
-
