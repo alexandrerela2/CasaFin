@@ -35,3 +35,30 @@
 npm i -g vercel
 vercel login
 vercel --prod --cwd web
+
+
+## Etapa 4A (CRUD + Resumos)
+
+### Frontend
+- **/web/app.html**: UI principal (Dashboard, Receitas, Despesas, Config).
+- **/web/js/app-entries.js**: CRUD de lançamentos + resumos por período.
+- **/web/js/app-config.js**: Tema do tenant + categorias.
+- **/web/lib/supabase.js**: Client helper (auth, tenant, etc.).
+- **/web/config.js**: **Preencha** `SUPABASE_URL` e `SUPABASE_ANON_KEY`.
+
+### Backend (Supabase)
+- **/supabase/4A_app_financeiro.sql**: índices, funções, trigger, view e RLS.
+- **/supabase/4A_seed_categorias.sql** (opcional): categorias iniciais.
+
+> **Importante (CasaFin):** após qualquer mudança de **funções, policies, tabelas ou grants**, execute:
+>
+> ```sql
+> SELECT pg_notify('pgrst','reload schema');
+> ```
+
+### Passos
+1. Rode `supabase/4A_app_financeiro.sql`.
+2. (Opcional) Rode `4A_seed_categorias.sql` com seus UUIDs.
+3. Publique a pasta `/web`.
+4. Faça login → teste Dashboard/Receitas/Despesas/Config.
+
