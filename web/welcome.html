@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CasaFin — Bem-vindo</title>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600;800&display=swap" rel="stylesheet">
+  <style>
+    :root{ --primary:#862222; --bg:#f7f7f9; --card:#fff; --border:#ececf2; --muted:#7b8494 }
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);font-family:"Nunito Sans",system-ui;color:#111}
+    .wrap{max-width:460px;margin:40px auto;padding:0 16px}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:0 1px 6px rgba(0,0,0,.04)}
+    header{padding:16px 18px;border-bottom:1px solid #f0f2f5;font-weight:800}
+    .content{padding:18px}
+    .muted{color:var(--muted)}
+    .row{display:flex;flex-direction:column;gap:10px;margin-top:12px}
+    input{padding:12px;border:1px solid #e0e0e6;border-radius:12px;font-size:15px}
+    .btn{padding:12px 14px;border-radius:12px;border:1px solid var(--primary);background:var(--primary);color:#fff;cursor:pointer}
+    .btn[disabled]{opacity:.6;cursor:not-allowed}
+    .hint{font-size:13px;color:#5b6372}
+    .ok{color:#1a7f37}
+    .err{color:#b00020}
+    .center{text-align:center}
+    .top-space{margin-top:8px}
+    code{background:#f6f7fb;border:1px solid #ececf2;padding:0 6px;border-radius:8px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <header>Bem-vindo ao CasaFin</header>
+      <div class="content">
+        <p id="state" class="muted">Validando seu convite…</p>
+
+        <div id="setpw" style="display:none">
+          <p class="hint">Conta: <b id="email">—</b></p>
+          <div class="row">
+            <input id="pw1" type="password" placeholder="Nova senha (mín. 8 caracteres)" minlength="8" />
+            <input id="pw2" type="password" placeholder="Confirmar senha" minlength="8" />
+            <button id="btnSet" class="btn">Salvar senha e entrar</button>
+            <p id="msg" class="hint"></p>
+          </div>
+        </div>
+
+        <div id="problem" style="display:none" class="top-space">
+          <p class="err" id="errmsg"></p>
+          <p class="hint">Se o link expirou, volte para a <a href="./index.html">página de login</a> e peça um novo convite.</p>
+        </div>
+
+        <div id="done" style="display:none" class="center">
+          <p class="ok">Senha definida com sucesso! Redirecionando…</p>
+          <p class="hint">Se nada acontecer, <a href="./app.html">clique aqui para ir ao app</a>.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="./config.js"></script>
+  <script type="module" src="./lib/supabase.js"></script>
+  <script type="module" src="./js/welcome.js"></script>
+</body>
+</html>
