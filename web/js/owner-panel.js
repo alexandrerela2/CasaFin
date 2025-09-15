@@ -8,7 +8,7 @@ function toast(msg){
   if (!t) return alert(msg);
   t.textContent = String(msg ?? "");
   t.style.display = "block";
-  setTimeout(()=> t.style.display = "none", 4000);
+  setTimeout(()=> t.style.display = "none", 4500);
 }
 function on(el, ev, fn){ el && el.addEventListener(ev, fn); }
 
@@ -73,7 +73,6 @@ async function loadTenants(){
       const sel = await supa.from("tenants").select("id,name,slug,passcode,active,created_at");
       if (sel.error) throw sel.error;
       data = (sel.data || []);
-      // contagem de membros (rápida)
       for (const t of data) {
         const cnt = await supa.from("memberships").select("*", { count: "exact", head: true }).eq("tenant_id", t.id);
         t.members = cnt.count ?? 0;
@@ -164,15 +163,46 @@ async function addMember(){
   const role  = document.getElementById("memRole").value;
   const approved = document.getElementById("memApproved").checked;
   if (!email) { toast("Informe o e-mail."); return; }
+
   try {
-    const { data, error } = await supa.rpc("invite_member_by_email", {
+    // 1) Tenta via RPC (exige que o e-mail exista no Auth)
+    const up = await supa.rpc("invite_member_by_email", {
       p_tenant: currentTenant.id, p_email: email, p_role: role, p_approved: approved
     });
-    if (error) throw error;
-    if (!data?.ok) throw new Error(data?.error || "Falha ao adicionar/atualizar membro");
+    if (up.error) throw up.error;
+
+    if (!up.data?.ok) {
+      // 2) Se não existe (USER_NOT_FOUND), chama a API serverless para criar/invitar
+      if (up.data?.error === "USER_NOT_FOUND") {
+        const { data:{ session } } = await supa.auth.getSession();
+        const resp = await fetch("/api/invite-user", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${session?.access_token || ""}`
+          },
+          body: JSON.stringify({
+            tenantId: currentTenant.id,
+            email, role, approved
+          })
+        });
+        const json = await resp.json();
+        if (!resp.ok || !json.ok) {
+          throw new Error(json?.error || `HTTP ${resp.status}`);
+        }
+      } else {
+        throw new Error(up.data?.error || "Falha ao adicionar/atualizar membro");
+      }
+    }
+
     document.getElementById("memEmail").value = "";
     await listMembers(currentTenant);
-  } catch (e) { toast("Erro ao adicionar/atualizar: " + (e?.message || e)); }
+    toast("Convite enviado e membro vinculado.");
+  } catch (e) {
+    console.error(e);
+    toast("Erro ao adicionar/atualizar: " + (e?.message || e));
+  }
 }
 
 window.addEventListener("DOMContentLoaded", () => { init(); });
+
