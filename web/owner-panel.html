@@ -26,8 +26,6 @@
     .badge{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #e0e0e6}
     .badge.active{background:#eafff3;border-color:#bfe8cd}
     .badge.paused{background:#fff4f2;border-color:#f0c4ba}
-    details{border:1px dashed #eee;border-radius:12px;padding:8px}
-    summary{cursor:pointer}
     code{background:#f6f7fb;border:1px solid #ececf2;padding:1px 6px;border-radius:8px}
   </style>
 </head>
@@ -50,7 +48,7 @@
         </div>
         <table>
           <thead>
-            <tr><th>Nome</th><th>Status</th><th>ID</th><th>Criado em</th><th>Membros</th><th>Ações</th></tr>
+            <tr><th>Nome</th><th>Slug</th><th>Status</th><th>ID</th><th>Criado em</th><th>Membros</th><th>Ações</th></tr>
           </thead>
           <tbody id="tblTenants"></tbody>
         </table>
@@ -60,6 +58,18 @@
     <section class="card">
       <header><b>Membros do tenant selecionado</b><span id="selTenantName" class="muted">—</span></header>
       <div class="content">
+        <div class="row" style="margin-bottom:8px">
+          <input id="memEmail" placeholder="E-mail do usuário" />
+          <select id="memRole">
+            <option value="usuario" selected>usuario</option>
+            <option value="admin">admin</option>
+            <option value="owner">owner</option>
+          </select>
+          <label style="display:flex;align-items:center;gap:6px;flex:0 0 auto">
+            <input id="memApproved" type="checkbox" /> Aprovado
+          </label>
+          <button id="btnAddMember" class="btn">Adicionar/Atualizar membro</button>
+        </div>
         <table>
           <thead><tr><th>E-mail</th><th>User ID</th><th>Role</th><th>Approved</th><th>Ações</th></tr></thead>
           <tbody id="tblMembers"></tbody>
