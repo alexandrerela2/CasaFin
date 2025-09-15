@@ -165,33 +165,30 @@ async function addMember(){
   if (!email) { toast("Informe o e-mail."); return; }
 
   try {
-    // 1) Tenta via RPC (exige que o e-mail exista no Auth)
+    // 1) Tenta via RPC (só funciona se o e-mail já existe no Auth)
     const up = await supa.rpc("invite_member_by_email", {
       p_tenant: currentTenant.id, p_email: email, p_role: role, p_approved: approved
     });
     if (up.error) throw up.error;
 
     if (!up.data?.ok) {
-      // 2) Se não existe (USER_NOT_FOUND), chama a API serverless para criar/invitar
-      if (up.data?.error === "USER_NOT_FOUND") {
-        const { data:{ session } } = await supa.auth.getSession();
-        const resp = await fetch("/api/invite-user", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${session?.access_token || ""}`
-          },
-          body: JSON.stringify({
-            tenantId: currentTenant.id,
-            email, role, approved
-          })
-        });
-        const json = await resp.json();
-        if (!resp.ok || !json.ok) {
-          throw new Error(json?.error || `HTTP ${resp.status}`);
-        }
-      } else {
-        throw new Error(up.data?.error || "Falha ao adicionar/atualizar membro");
+      // 2) Senão, chama a API serverless (cria/invita e vincula)
+      const { data:{ session } } = await supa.auth.getSession();
+      const resp = await fetch("/api/invite-user", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session?.access_token || ""}`
+        },
+        body: JSON.stringify({ tenantId: currentTenant.id, email, role, approved })
+      });
+
+      const ctype = resp.headers.get("content-type") || "";
+      const isJson = ctype.includes("application/json");
+      const payload = isJson ? await resp.json() : { ok:false, error:`HTTP_${resp.status}`, details: (await resp.text()).slice(0,180) };
+
+      if (!resp.ok || !payload?.ok) {
+        throw new Error(payload?.error || payload?.details || `HTTP ${resp.status}`);
       }
     }
 
@@ -205,4 +202,3 @@ async function addMember(){
 }
 
 window.addEventListener("DOMContentLoaded", () => { init(); });
-
