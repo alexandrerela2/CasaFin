@@ -44,14 +44,20 @@ async function loadTenants(){
   const tbody = document.getElementById("tblTenants"); tbody.innerHTML = "";
   for (const t of (data||[])) {
     const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${t.name || ""}</td>
-      <td><code>${t.slug || ""}</code></td>
-      <td>${t.active ? '<span class="badge active">ativo</span>' : '<span class="badge paused">paralisado</span>'}</td>
-      <td><code>${t.id}</code></td>
-      <td>${new Date(t.created_at).toLocaleString("pt-BR")}</td>
-      <td>${t.members}</td>
-      <td>
+   tr.innerHTML = `
+  <td>${t.name || ""}</td>
+  <td><code>${t.slug || ""}</code></td>
+  <td><code>${t.passcode || ""}</code></td>
+  <td>${t.active ? '<span class="badge active">ativo</span>' : '<span class="badge paused">paralisado</span>'}</td>
+  <td><code>${t.id}</code></td>
+  <td>${new Date(t.created_at).toLocaleString("pt-BR")}</td>
+  <td>${t.members}</td>
+  <td>
+    <button class="btn" data-act="members">Membros</button>
+    <button class="btn" data-act="toggle">${t.active ? "Paralisar" : "Ativar"}</button>
+    <button class="btn" data-act="delete">Excluir</button>
+  </td>`;
+
         <button class="btn" data-act="members">Membros</button>
         <button class="btn" data-act="toggle">${t.active ? "Paralisar" : "Ativar"}</button>
         <button class="btn" data-act="delete">Excluir</button>
