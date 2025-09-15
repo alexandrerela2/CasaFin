@@ -1,240 +1,72 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="pt-br">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>CasaFin — Painel do Dono</title>
+  <title>CasaFin — Painel do Owner</title>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600;800&display=swap" rel="stylesheet">
   <style>
-    :root { color-scheme: light dark; }
-    body { font-family: system-ui, Arial, sans-serif; margin:0; background:#fff; color:#1f2328; }
-    header { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid #eaeef2; }
-    header .actions { display:flex; gap:10px; }
-    main { padding:22px; max-width:980px; margin:0 auto; }
-    h1 { font-size:22px; margin: 14px 0 18px; }
-    .card { background:#fafbfc; border:1px solid #eaeef2; border-radius:12px; padding:18px; }
-    .row { display:grid; grid-template-columns: 1fr 180px 140px; gap:12px; }
-    label { font-size:12px; color:#57606a; display:block; margin-bottom:6px; }
-    input, select { width:100%; padding:10px 12px; border:1px solid #d0d7de; border-radius:10px; font-size:14px; background:#fff; color:#1f2328; }
-    .toolbar { margin-top:14px; display:flex; gap:10px; }
-    button { padding:10px 14px; border:0; border-radius:10px; cursor:pointer; font-weight:600; }
-    .btn-primary { background:#1f883d; color:#fff; }
-    .btn-secondary { background:#eef2f7; color:#111; }
-    .btn-danger { background:#b42318; color:#fff; }
-    table { width:100%; border-collapse: collapse; margin-top:18px; }
-    th, td { text-align:left; border-bottom:1px solid #eaeef2; padding:10px 8px; font-size:14px; }
-    th { font-size:12px; color:#57606a; text-transform: uppercase; letter-spacing:.02em; }
-    .status-used { color:#1f883d; font-weight:600; }
-    .status-pending { color:#9a6700; font-weight:600; }
-    .muted { color:#6a737d; font-size:12px; }
+    :root{ --primary:#862222; --bg:#f7f7f9; --card:#fff; --border:#ececf2; --muted:#7b8494 }
+    *{box-sizing:border-box}
+    body{margin:0; font-family:"Nunito Sans",system-ui; background:var(--bg); color:#111}
+    header.appbar{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;background:var(--card);border-bottom:1px solid var(--border)}
+    .logo{font-weight:800}
+    .btn{padding:10px 14px;border-radius:10px;border:1px solid #e0e0e6;background:#fff;cursor:pointer}
+    main{max-width:1100px;margin:16px auto;padding:0 16px;display:grid;gap:12px}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:0 1px 6px rgba(0,0,0,.04)}
+    .card>header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid #f0f2f5}
+    .card .content{padding:12px 16px}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:10px;border-bottom:1px solid #f0f2f5;text-align:left}
+    th{font-weight:600}
+    .row{display:flex;gap:8px;flex-wrap:wrap}
+    .row>*{flex:1 1 200px}
+    .muted{color:var(--muted)}
   </style>
-  <script src="./config.js"></script>
 </head>
 <body>
-  <header>
-    <strong>CasaFin — Painel do Dono</strong>
-    <div class="actions">
-      <a class="btn-secondary" href="/app.html" style="text-decoration:none; padding:10px 14px; border-radius:10px; display:inline-block;">App</a>
-      <button id="btn-logout" class="btn-secondary">Sair</button>
+  <header class="appbar">
+    <div class="logo">CasaFin — Painel do Owner</div>
+    <div class="right">
+      <button id="btnGoApp" class="btn">Ir para App</button>
+      <button id="btnSignOut" class="btn">Sair</button>
     </div>
   </header>
 
   <main>
-    <h1>Convites</h1>
-
-    <div class="card">
-      <div class="row">
-        <div>
-          <label for="invite-email">E-mail</label>
-          <input id="invite-email" type="email" placeholder="pessoa@exemplo.com" />
+    <section class="card">
+      <header><b>Tenants</b><span class="muted">Criar / Listar</span></header>
+      <div class="content">
+        <div class="row" style="margin-bottom:8px">
+          <input id="tenName" placeholder="Nome do tenant (ex.: Família Silva)" />
+          <button id="btnCreateTenant" class="btn">Criar tenant</button>
         </div>
-        <div>
-          <label for="invite-role">Papel</label>
-          <select id="invite-role">
-            <option value="admin">admin</option>
-            <option value="usuario">usuario</option>
-          </select>
+        <table>
+          <thead><tr><th>Nome</th><th>ID</th><th>Criado em</th><th></th></tr></thead>
+          <tbody id="tblTenants"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <header><b>Membros do Tenant selecionado</b><span id="selTenantName" class="muted">—</span></header>
+      <div class="content">
+        <div class="row" style="margin-bottom:8px">
+          <input id="selTenantId" placeholder="Cole o tenant_id para listar membros" />
+          <button id="btnLoadMembers" class="btn">Listar membros</button>
         </div>
-        <div>
-          <label for="invite-days">Validade (dias)</label>
-          <input id="invite-days" type="number" min="1" max="30" value="7" />
-        </div>
+        <table>
+          <thead><tr><th>User</th><th>Role</th><th>Approved</th><th></th></tr></thead>
+          <tbody id="tblMembers"></tbody>
+        </table>
       </div>
-
-      <div class="toolbar">
-        <button id="btn-create" class="btn-primary">Gerar convite</button>
-        <button id="btn-refresh" class="btn-secondary">Atualizar lista</button>
-      </div>
-
-      <div class="toolbar" style="margin-top:8px;">
-        <button id="btn-clear-used" class="btn-secondary">Limpar usados</button>
-        <button id="btn-clear-pending" class="btn-secondary">Limpar pendentes</button>
-        <button id="btn-clear-all" class="btn-danger">Limpar TODOS</button>
-      </div>
-
-      <table>
-        <thead>
-          <tr>
-            <th>E-mail</th>
-            <th>Papel</th>
-            <th>Status</th>
-            <th>Criado em</th>
-          </tr>
-        </thead>
-        <tbody id="tbody-invites">
-          <tr><td colspan="4" class="muted">Carregando…</td></tr>
-        </tbody>
-      </table>
-      <p id="hint" class="muted" style="margin-top:10px;">
-        O link de convite é enviado por e-mail. Se não chegar, verifique o SMTP/antispam.
-      </p>
-    </div>
+    </section>
   </main>
 
-  <script type="module">
-    import { supabase } from "./lib/supabase.js";
-    import { requireOwner, signOutAndGoHome } from "./lib/guard.js";
-
-    // ===== Guards =====
-    await requireOwner();
-    document.getElementById("btn-logout").addEventListener("click", signOutAndGoHome);
-
-    // ===== Util =====
-    async function getOwnerTenantId() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Sessão inválida");
-
-      const { data, error } = await supabase
-        .from("memberships")
-        .select("tenant_id, role")
-        .eq("user_id", user.id)
-        .eq("role", "owner")
-        .limit(1)
-        .maybeSingle();
-
-      if (error || !data) throw new Error("Tenant do owner não encontrado");
-      return data.tenant_id;
-    }
-
-    function fmtDate(iso) {
-      if (!iso) return "—";
-      const d = new Date(iso);
-      return d.toLocaleString();
-    }
-
-    // ===== Listagem =====
-    async function loadInvites() {
-      const tbody = document.getElementById("tbody-invites");
-      tbody.innerHTML = `<tr><td colspan="4" class="muted">Carregando…</td></tr>`;
-
-      try {
-        const tenantId = await getOwnerTenantId();
-        const { data, error } = await supabase
-          .from("invites")
-          .select("email, role, used_at, created_at")
-          .eq("tenant_id", tenantId)
-          .order("created_at", { ascending: false });
-
-        if (error) throw error;
-
-        if (!data || data.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="4" class="muted">Sem convites.</td></tr>`;
-          return;
-        }
-
-        tbody.innerHTML = data.map((r) => {
-          const status = r.used_at
-            ? `<span class="status-used">Usado</span>`
-            : `<span class="status-pending">Pendente</span>`;
-          return `<tr>
-            <td>${r.email}</td>
-            <td>${r.role}</td>
-            <td>${status}</td>
-            <td>${fmtDate(r.created_at)}</td>
-          </tr>`;
-        }).join("");
-      } catch (e) {
-        console.error(e);
-        alert("Erro ao carregar convites: " + e.message);
-      }
-    }
-
-    // ===== Criar convite (via API serverless) =====
-    async function createInvite() {
-      const email = document.getElementById("invite-email").value.trim();
-      const role = document.getElementById("invite-role").value;
-      const days = parseInt(document.getElementById("invite-days").value || "7", 10);
-
-      if (!email) return alert("Informe o e-mail.");
-      if (!/^\S+@\S+\.\S+$/.test(email)) return alert("E-mail inválido.");
-
-      try {
-        const tenantId = await getOwnerTenantId();
-        const resp = await fetch("/api/owner-invite", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email,
-            role,
-            expiresInDays: days,
-            tenant_id: tenantId
-          })
-        });
-
-        if (!resp.ok) {
-          const j = await resp.json().catch(() => ({}));
-          throw new Error(j.message || `Falha HTTP ${resp.status}`);
-        }
-
-        const j = await resp.json();
-        alert("Convite enviado para: " + email);
-        document.getElementById("invite-email").value = "";
-        await loadInvites();
-      } catch (e) {
-        console.error(e);
-        alert("Erro ao gerar convite: " + e.message);
-      }
-    }
-
-    // ===== Limpar convites (delete) =====
-    async function clearInvites(mode) {
-      try {
-        const tenantId = await getOwnerTenantId();
-        let q = supabase.from("invites").delete().eq("tenant_id", tenantId);
-
-        if (mode === "pending")      q = q.is("used_at", null);
-        else if (mode === "used")    q = q.not("used_at", "is", null);
-        // "all" = sem filtro extra
-
-        // Para contar removidos, precisamos de .select() em delete (supabase v2)
-        const { data, error } = await q.select("token");
-        if (error) throw error;
-
-        const removidos = (data || []).length;
-        alert(`Convites removidos: ${removidos}`);
-        await loadInvites();
-      } catch (e) {
-        console.error(e);
-        alert("Erro ao limpar convites: " + e.message + "\nSe for 'permission denied', aplique a policy de DELETE.");
-      }
-    }
-
-    // ===== Eventos =====
-    document.getElementById("btn-create").addEventListener("click", createInvite);
-    document.getElementById("btn-refresh").addEventListener("click", loadInvites);
-
-    document.getElementById("btn-clear-used").addEventListener("click", () => {
-      if (confirm("Remover convites USADOS deste espaço?")) clearInvites("used");
-    });
-    document.getElementById("btn-clear-pending").addEventListener("click", () => {
-      if (confirm("Remover convites PENDENTES deste espaço?")) clearInvites("pending");
-    });
-    document.getElementById("btn-clear-all").addEventListener("click", () => {
-      if (confirm("Remover TODOS os convites deste espaço?")) clearInvites("all");
-    });
-
-    // start
-    await loadInvites();
-  </script>
+  <script src="./config.js"></script>
+  <script type="module" src="./lib/supabase.js"></script>
+  <script type="module" src="./js/owner-panel.js"></script>
 </body>
 </html>
 
