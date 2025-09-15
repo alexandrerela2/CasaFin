@@ -1,12 +1,12 @@
-import { supa } from "../lib/supabase.js";
+import { supa, isPlatformOwner, redirectAfterLogin } from "../lib/supabase.js";
 
-// Se já estiver logado, vai direto pro app
+// Se já estiver logado, vai para o destino correto
 (async ()=>{
   const { data:{ session } } = await supa.auth.getSession();
-  if (session) window.location.href = "./app.html";
+  if (session) await redirectAfterLogin();
 })();
 
-// Trata possíveis callbacks OAuth (?code=) — se você vier a usar Google/GitHub
+// Trata callbacks OAuth (?code=...) se um dia você usar provedores sociais
 (async ()=>{
   const url = new URL(window.location.href);
   const code = url.searchParams.get("code");
@@ -14,7 +14,7 @@ import { supa } from "../lib/supabase.js";
     try {
       await supa.auth.exchangeCodeForSession(window.location.href);
       history.replaceState({}, document.title, "./index.html");
-      window.location.href = "./app.html";
+      await redirectAfterLogin();
     } catch (e) {
       showError(e.message || "Falha ao finalizar login.");
     }
@@ -23,14 +23,14 @@ import { supa } from "../lib/supabase.js";
 
 const frm = document.getElementById("frmLogin");
 frm.addEventListener("submit", async (e)=>{
-  e.preventDefault(); // <- evita o GET e o "?" na URL
+  e.preventDefault();
   const email = /** @type {HTMLInputElement} */(document.getElementById("email")).value.trim();
   const password = /** @type {HTMLInputElement} */(document.getElementById("password")).value;
 
   try {
     const { error } = await supa.auth.signInWithPassword({ email, password });
     if (error) throw error;
-    window.location.href = "./app.html";
+    await redirectAfterLogin();
   } catch (err) {
     showError(err.message || "Não foi possível entrar.");
   }
@@ -56,3 +56,4 @@ function showError(msg){
   el.textContent = msg;
   el.style.display = "block";
 }
+
