@@ -10,10 +10,11 @@
     :root{ --primary:#862222; --bg:#f7f7f9; --card:#fff; --border:#ececf2; --muted:#7b8494 }
     *{box-sizing:border-box}
     body{margin:0; font-family:"Nunito Sans",system-ui; background:var(--bg); color:#111}
-    header.appbar{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;background:var(--card);border-bottom:1px solid var(--border)}
+    header.appbar{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--card);border-bottom:1px solid var(--border)}
     .logo{font-weight:800}
     .btn{padding:10px 14px;border-radius:10px;border:1px solid #e0e0e6;background:#fff;cursor:pointer}
-    main{max-width:1100px;margin:16px auto;padding:0 16px;display:grid;gap:12px}
+    .btn.primary{background:var(--primary);color:#fff;border-color:var(--primary)}
+    main{max-width:1120px;margin:16px auto;padding:0 16px;display:grid;gap:12px}
     .card{background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:0 1px 6px rgba(0,0,0,.04)}
     .card>header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid #f0f2f5}
     .card .content{padding:12px 16px}
@@ -27,11 +28,14 @@
     .badge.active{background:#eafff3;border-color:#bfe8cd}
     .badge.paused{background:#fff4f2;border-color:#f0c4ba}
     code{background:#f6f7fb;border:1px solid #ececf2;padding:1px 6px;border-radius:8px}
+    #debug{font-size:12px;color:#666}
+    #toast{display:none;position:fixed;right:16px;bottom:16px;background:#111;color:#fff;padding:10px 12px;border-radius:10px;max-width:70%;z-index:9999}
   </style>
 </head>
 <body>
   <header class="appbar">
     <div class="logo">CasaFin — Painel do Owner</div>
+    <div id="debug" class="muted">...</div>
     <div class="right">
       <button id="btnGoApp" class="btn">Ir para App</button>
       <button id="btnSignOut" class="btn">Sair</button>
@@ -40,38 +44,37 @@
 
   <main>
     <section class="card">
-      <header><b>Tenants</b><span class="muted">Criar / Listar / Paralisar / Excluir</span></header>
+      <header>
+        <b>Tenants</b>
+        <span class="muted">Criar / Listar / Paralisar / Excluir</span>
+      </header>
       <div class="content">
         <div class="row" style="margin-bottom:8px">
           <input id="tenName" placeholder="Nome do tenant (ex.: Família Silva)" />
-          <button id="btnCreateTenant" class="btn">Criar tenant</button>
+          <button id="btnCreateTenant" class="btn primary">Criar tenant</button>
         </div>
         <table>
-         <thead>
-  <tr>
-    <th>Nome</th>
-    <th>Slug</th>
-    <th>Passcode</th>
-    <th>Status</th>
-    <th>ID</th>
-    <th>Criado em</th>
-    <th>Membros</th>
-    <th>Ações</th>
-  </tr>
-</thead>
-
+          <thead>
+            <tr>
+              <th>Nome</th><th>Slug</th><th>Passcode</th><th>Status</th>
+              <th>ID</th><th>Criado em</th><th>Membros</th><th>Ações</th>
+            </tr>
+          </thead>
           <tbody id="tblTenants"></tbody>
         </table>
       </div>
     </section>
 
     <section class="card">
-      <header><b>Membros do tenant selecionado</b><span id="selTenantName" class="muted">—</span></header>
+      <header>
+        <b>Membros do tenant selecionado</b>
+        <span id="selTenantName" class="muted">—</span>
+      </header>
       <div class="content">
         <div class="row" style="margin-bottom:8px">
           <input id="memEmail" placeholder="E-mail do usuário" />
           <select id="memRole">
-            <option value="usuario" selected>usuario</option>
+            <option value="usuario">usuario</option>
             <option value="admin">admin</option>
             <option value="owner">owner</option>
           </select>
@@ -87,6 +90,8 @@
       </div>
     </section>
   </main>
+
+  <div id="toast"></div>
 
   <script src="./config.js"></script>
   <script type="module" src="./lib/supabase.js"></script>
