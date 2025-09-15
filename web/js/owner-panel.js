@@ -5,11 +5,11 @@ let currentTenant = null;
 
 function toast(msg){
   const t = document.getElementById("toast");
+  if (!t) return alert(msg);
   t.textContent = String(msg ?? "");
   t.style.display = "block";
   setTimeout(()=> t.style.display = "none", 4000);
 }
-
 function on(el, ev, fn){ el && el.addEventListener(ev, fn); }
 
 async function init(){
@@ -19,23 +19,15 @@ async function init(){
     document.getElementById("debug").textContent =
       user ? `user=${user.id} | role=${user.app_metadata?.app_role ?? "-"}` : "sem sessão";
 
-    // Guard: somente Owner de plataforma
-    if (!isPlatformOwner(user)) {
-      window.location.href = "./app.html";
-      return;
-    }
+    if (!isPlatformOwner(user)) { window.location.href = "./app.html"; return; }
 
-    // Bind buttons
     on(document.getElementById("btnSignOut"), "click", signOutAndGoHome);
-    on(document.getElementById("btnGoApp"), "click", ()=> window.location.href = "./app.html");
+    on(document.getElementById("btnGoApp"),   "click", ()=> window.location.href = "./app.html");
     on(document.getElementById("btnCreateTenant"), "click", createTenant);
-    on(document.getElementById("btnAddMember"), "click", addMember);
+    on(document.getElementById("btnAddMember"),    "click", addMember);
 
     await loadTenants();
-  } catch (e) {
-    console.error(e);
-    toast(e?.message || e);
-  }
+  } catch (e) { console.error(e); toast(e?.message || e); }
 }
 
 async function createTenant(){
@@ -46,15 +38,8 @@ async function createTenant(){
     if (error) throw error;
     document.getElementById("tenName").value = "";
     await loadTenants();
-    // se a RPC retornou o registro, já seleciona
-    if (data && data[0]) {
-      currentTenant = data[0];
-      await listMembers(currentTenant);
-    }
-  } catch (e) {
-    console.error(e);
-    toast("Erro ao criar tenant: " + (e?.message || e));
-  }
+    if (Array.isArray(data) && data[0]) { currentTenant = data[0]; await listMembers(currentTenant); }
+  } catch (e) { console.error(e); toast("Erro ao criar tenant: " + (e?.message || e)); }
 }
 
 async function toggleTenantActive(tenant){
@@ -81,21 +66,16 @@ async function deleteTenant(id){
 
 async function loadTenants(){
   try {
-    // 1) tenta via RPC (security definer)
     let { data, error } = await supa.rpc("tenants_with_counts");
     if (error) throw error;
 
-    // 2) fallback (quando RPC retornar null/undefined)
     if (!Array.isArray(data)) {
       const sel = await supa.from("tenants").select("id,name,slug,passcode,active,created_at");
       if (sel.error) throw sel.error;
       data = (sel.data || []);
-      // contagem simples por tenant
+      // contagem de membros (rápida)
       for (const t of data) {
-        const cnt = await supa
-          .from("memberships")
-          .select("*", { count: "exact", head: true })
-          .eq("tenant_id", t.id);
+        const cnt = await supa.from("memberships").select("*", { count: "exact", head: true }).eq("tenant_id", t.id);
         t.members = cnt.count ?? 0;
       }
     }
@@ -122,7 +102,6 @@ async function loadTenants(){
       tbody.appendChild(tr);
     }
 
-    // Se tinha um tenant selecionado, mantenha a seção de membros sincronizada
     if (currentTenant) {
       const still = data.find(x => x.id === currentTenant.id);
       if (still) { currentTenant = still; await listMembers(still); }
@@ -132,10 +111,7 @@ async function loadTenants(){
         document.getElementById("selTenantName").textContent = "—";
       }
     }
-  } catch (e) {
-    console.error(e);
-    toast("Erro ao carregar tenants: " + (e?.message || e));
-  }
+  } catch (e) { console.error(e); toast("Erro ao carregar tenants: " + (e?.message || e)); }
 }
 
 async function listMembers(tenant){
@@ -156,39 +132,36 @@ async function listMembers(tenant){
           <button class="btn" data-act="approve">Aprovar</button>
           <button class="btn" data-act="remove">Remover</button>
         </td>`;
-      tr.querySelector('[data-act="approve"]').onclick = ()=> approveMember(tenant.id, m.user_id);
+      tr.querySelector('[data-act="approve"]').onclick = ()=> approveMember(tenant.id, m.user_id, true);
       tr.querySelector('[data-act="remove"]').onclick  = ()=> removeMember(tenant.id, m.user_id);
       tbody.appendChild(tr);
     }
-  } catch (e) {
-    console.error(e);
-    toast("Erro ao listar membros: " + (e?.message || e));
-  }
+  } catch (e) { console.error(e); toast("Erro ao listar membros: " + (e?.message || e)); }
 }
 
-async function approveMember(tenantId, userId){
+async function approveMember(tenantId, userId, approved){
   try {
-    const { error } = await supa.from("memberships").update({ approved:true })
-      .eq("tenant_id", tenantId).eq("user_id", userId);
+    const { data, error } = await supa.rpc("approve_member", { p_tenant: tenantId, p_user: userId, p_approved: approved });
     if (error) throw error;
-    if (currentTenant?.id === tenantId) await listMembers(currentTenant);
+    if (!data?.ok) throw new Error("Não foi possível aprovar.");
+    if (currentTenant?.id === tenantId) { await listMembers(currentTenant); }
   } catch (e) { toast("Erro ao aprovar: " + (e?.message || e)); }
 }
 
 async function removeMember(tenantId, userId){
   if (!confirm("Remover este membro?")) return;
   try {
-    const { error } = await supa.from("memberships").delete()
-      .eq("tenant_id", tenantId).eq("user_id", userId);
+    const { data, error } = await supa.rpc("remove_member", { p_tenant: tenantId, p_user: userId });
     if (error) throw error;
-    if (currentTenant?.id === tenantId) await listMembers(currentTenant);
+    if (!data?.ok) throw new Error("Não foi possível remover.");
+    if (currentTenant?.id === tenantId) { await listMembers(currentTenant); }
   } catch (e) { toast("Erro ao remover: " + (e?.message || e)); }
 }
 
 async function addMember(){
   if (!currentTenant) { toast("Selecione um tenant (botão Membros)."); return; }
   const email = document.getElementById("memEmail").value.trim();
-  const role = document.getElementById("memRole").value;
+  const role  = document.getElementById("memRole").value;
   const approved = document.getElementById("memApproved").checked;
   if (!email) { toast("Informe o e-mail."); return; }
   try {
@@ -202,5 +175,4 @@ async function addMember(){
   } catch (e) { toast("Erro ao adicionar/atualizar: " + (e?.message || e)); }
 }
 
-// Inicializa quando o DOM estiver pronto (nada de top-level await)
 window.addEventListener("DOMContentLoaded", () => { init(); });
