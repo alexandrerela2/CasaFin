@@ -2,7 +2,7 @@
 import { createClient } from "@supabase/supabase-js";
 
 /**
- * GET  /api/invite-user   -> sanity check
+ * GET  /api/invite-user   -> sanity check (retorna JSON)
  * POST /api/invite-user   -> { tenantId, email, role, approved }
  *   Header: Authorization: Bearer <access_token do Owner>
  */
@@ -25,7 +25,12 @@ export default async function handler(req, res) {
     const url  = process.env.SUPABASE_URL;
     const anon = process.env.SUPABASE_ANON_KEY;
     const svc  = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    const redirectTo = process.env.APP_URL ? `${process.env.APP_URL}/index.html` : undefined;
+
+    // 🔁 NOVO: ao aceitar o convite, usuário vai para /welcome.html
+    const redirectTo = process.env.APP_URL
+      ? `${process.env.APP_URL}/welcome.html`
+      : undefined;
+
     if (!url || !anon || !svc) return res.status(500).json({ ok:false, error:"MISSING_ENV_SUPABASE" });
 
     // autentica o chamador (precisa ser Owner de plataforma)
@@ -67,3 +72,4 @@ export default async function handler(req, res) {
     return res.status(500).json({ ok:false, error:"UNEXPECTED", details:String(e?.message || e) });
   }
 }
+
